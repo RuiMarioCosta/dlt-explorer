@@ -1,0 +1,10 @@
+services:
+  ubuntu:
+    extends:
+      file: ../common.yaml
+      service: common
+    build:
+      dockerfile: ubuntu.dockerfile
+      args:
+        TAG: latest
+        IMAGE: ubuntu
