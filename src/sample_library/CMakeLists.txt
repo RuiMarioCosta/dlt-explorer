@@ -1,9 +1,6 @@
 include(GenerateExportHeader)
 
-
 add_library(sample_library sample_library.cpp)
-
-
 
 add_library(dlt_explorer::sample_library ALIAS sample_library)
 
@@ -20,7 +17,8 @@ set_target_properties(
              CXX_VISIBILITY_PRESET hidden
              VISIBILITY_INLINES_HIDDEN YES)
 
-generate_export_header(sample_library EXPORT_FILE_NAME ${PROJECT_BINARY_DIR}/include/dlt_explorer/sample_library_export.hpp)
+generate_export_header(sample_library EXPORT_FILE_NAME
+                       ${PROJECT_BINARY_DIR}/include/dlt_explorer/sample_library_export.hpp)
 
 if(NOT BUILD_SHARED_LIBS)
   target_compile_definitions(sample_library PUBLIC SAMPLE_LIBRARY_STATIC_DEFINE)

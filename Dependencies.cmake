@@ -40,4 +40,8 @@ function(dlt_explorer_setup_dependencies)
     cpmaddpackage("gh:lefticus/tools#update_build_system")
   endif()
 
+  if(dlt_explorer_ENABLE_DLT_DAEMON)
+    cpmaddpackage("gh:COVESA/dlt-daemon@2.18.10")
+  endif()
+
 endfunction()

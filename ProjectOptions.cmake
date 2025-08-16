@@ -80,6 +80,8 @@ macro(dlt_explorer_setup_options)
     option(dlt_explorer_ENABLE_CPPCHECK "Enable cpp-check analysis" OFF)
     option(dlt_explorer_ENABLE_PCH "Enable precompiled headers" OFF)
     option(dlt_explorer_ENABLE_CACHE "Enable ccache" OFF)
+    option(dlt_explorer_ENABLE_DLT_DAEMON "Build using dlt-daemon external dependency" OFF)
+    option(dlt_explorer_ENABLE_BENCHMARK "Build benchmark" OFF)
   else()
     option(dlt_explorer_ENABLE_IPO "Enable IPO/LTO" ON)
     option(dlt_explorer_WARNINGS_AS_ERRORS "Treat Warnings As Errors" ON)
@@ -94,6 +96,8 @@ macro(dlt_explorer_setup_options)
     option(dlt_explorer_ENABLE_CPPCHECK "Enable cpp-check analysis" ON)
     option(dlt_explorer_ENABLE_PCH "Enable precompiled headers" OFF)
     option(dlt_explorer_ENABLE_CACHE "Enable ccache" ON)
+    option(dlt_explorer_ENABLE_DLT_DAEMON "Build using dlt-daemon external dependency" ON)
+    option(dlt_explorer_ENABLE_BENCHMARK "Build benchmark" OFF)
   endif()
 
   if(NOT PROJECT_IS_TOP_LEVEL)
@@ -135,7 +139,7 @@ macro(dlt_explorer_global_options)
 
   if(dlt_explorer_ENABLE_HARDENING AND dlt_explorer_ENABLE_GLOBAL_HARDENING)
     include(cmake/Hardening.cmake)
-    if(NOT SUPPORTS_UBSAN 
+    if(NOT SUPPORTS_UBSAN
        OR dlt_explorer_ENABLE_SANITIZER_UNDEFINED
        OR dlt_explorer_ENABLE_SANITIZER_ADDRESS
        OR dlt_explorer_ENABLE_SANITIZER_THREAD
@@ -221,7 +225,7 @@ macro(dlt_explorer_local_options)
 
   if(dlt_explorer_ENABLE_HARDENING AND NOT dlt_explorer_ENABLE_GLOBAL_HARDENING)
     include(cmake/Hardening.cmake)
-    if(NOT SUPPORTS_UBSAN 
+    if(NOT SUPPORTS_UBSAN
        OR dlt_explorer_ENABLE_SANITIZER_UNDEFINED
        OR dlt_explorer_ENABLE_SANITIZER_ADDRESS
        OR dlt_explorer_ENABLE_SANITIZER_THREAD
