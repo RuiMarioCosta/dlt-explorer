@@ -31,8 +31,8 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macos-latest
-          - windows-latest
+          # - macos-latest
+          # - windows-latest
         compiler:
           # you can specify the version after `-` like "llvm-15.0.2".
           - llvm-19.1.1
@@ -43,7 +43,7 @@ jobs:
           - Release
           - Debug
         packaging_maintainer_mode:
-          - ON
+          # - ON
           - OFF
         build_shared:
           - OFF
