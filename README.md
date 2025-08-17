@@ -1,4 +1,5 @@
 # dlt-explorer
+App for visualizing and exploring DLT files
 
 [![ci](https://github.com/RuiMarioCosta/dlt-explorer/actions/workflows/ci.yml/badge.svg)](https://github.com/RuiMarioCosta/dlt-explorer/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/RuiMarioCosta/dlt-explorer/branch/main/graph/badge.svg)](https://codecov.io/gh/RuiMarioCosta/dlt-explorer)

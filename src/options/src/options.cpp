@@ -10,8 +10,7 @@
 
 namespace po = boost::program_options;
 
-Options parse_cmd_options(int argc, char **argv)
-{
+Options parse_cmd_options(int argc, char **argv) {
   std::filesystem::path path;
   std::filesystem::path filter;
   bool version1{ false };

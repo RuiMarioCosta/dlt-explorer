@@ -19,28 +19,18 @@
 
 using namespace boost::interprocess;
 
-template <typename T> void print(std::span<T> data) {
-  for (const auto &c : data) {
-    std::cout << c;
-  }
-  std::cout << '\n';
-}
-
 struct RawData {
   std::string_view data;
 };
 
 struct Print {
-  Print(std::ostream &os, bool non_verbose)
-      : m_os{os}, m_nonverbose{non_verbose} {}
+  Print(std::ostream &os, bool non_verbose) : m_os{ os }, m_nonverbose{ non_verbose } {}
 
   void operator()(std::string_view payload) const {
     m_os << "string_view: [";
     if (m_nonverbose) {
       m_os << std::setfill('0') << std::hex;
-      for (auto i : payload) {
-        m_os << std::setw(2) << static_cast<int>(i) << ' ';
-      }
+      for (auto i : payload) { m_os << std::setw(2) << static_cast<int>(i) << ' '; }
       m_os << std::setfill(' ') << std::dec;
     } else {
       m_os << payload;
@@ -50,24 +40,30 @@ struct Print {
 
   void operator()(RawData payload) const {
     m_os << " RawData: [" << std::setfill('0') << std::hex;
-    for (auto i : payload.data) {
-      m_os << std::setw(2) << static_cast<int>(i) << ' ';
-    }
+    for (auto i : payload.data) { m_os << std::setw(2) << static_cast<int>(i) << ' '; }
     m_os << std::setfill(' ') << std::dec << "]";
   }
 
-  void operator()(auto payload) const {
-    m_os << typeid(payload).name() << " auto: [" << payload << "]";
-  }
+  void operator()(auto payload) const { m_os << typeid(payload).name() << " auto: [" << payload << "]"; }
 
   std::ostream &m_os;
   bool m_nonverbose;
 };
 
 class DLT {
-  using payload_t = std::variant<std::string_view, RawData, bool, int8_t,
-                                 uint8_t, int16_t, uint16_t, int32_t, uint32_t,
-                                 int64_t, uint64_t, float32_t, float64_t>;
+  using payload_t = std::variant<std::string_view,
+    RawData,
+    bool,
+    int8_t,
+    uint8_t,
+    int16_t,
+    uint16_t,
+    int32_t,
+    uint32_t,
+    int64_t,
+    uint64_t,
+    float32_t,
+    float64_t>;
 
   static_assert(sizeof(payload_t) == 24);
   static_assert(alignof(payload_t) == 8);
@@ -102,8 +98,7 @@ class DLT {
 
 public:
   DLT() = delete;
-  DLT(mapped_region region)
-      : m_region(std::move(region)), m_size(0), m_buffer(1024) {
+  DLT(mapped_region region) : m_region(std::move(region)), m_size(0), m_buffer(1024) {
     assert(m_buffer.capacity() == 1024);
 
     uint8_t const *const begin = static_cast<uint8_t *>(m_region.get_address());
@@ -114,13 +109,12 @@ public:
       // Storage header
       auto const storageHeader = static_cast<DltStorageHeader *>(buffer);
       buffer = static_cast<uint8_t *>(buffer) + sizeof(DltStorageHeader);
-      m_patterns.emplace_back(
-          std::string_view{storageHeader->pattern, DLT_ID_SIZE});
+      m_patterns.emplace_back(std::string_view{ storageHeader->pattern, DLT_ID_SIZE });
       auto const s = storageHeader->seconds;
       m_seconds.emplace_back(s);
       auto const ms = storageHeader->microseconds;
       m_microseconds.emplace_back(ms);
-      m_ecus.emplace_back(std::string_view{storageHeader->ecu, DLT_ID_SIZE});
+      m_ecus.emplace_back(std::string_view{ storageHeader->ecu, DLT_ID_SIZE });
 
       if (dlt_check_storageheader(storageHeader) != DLT_RETURN_TRUE) {
         throw std::runtime_error("Invalid DLT storage header");
@@ -139,8 +133,7 @@ public:
       /* load standard header extra parameters if used */
       if (DLT_STANDARD_HEADER_EXTRA_SIZE(htyp)) {
         if (DLT_IS_HTYP_WEID(htyp)) {
-          m_ecus.back() = std::string_view(static_cast<char *>(buffer),
-                                           static_cast<size_t>(DLT_ID_SIZE));
+          m_ecus.back() = std::string_view(static_cast<char *>(buffer), static_cast<size_t>(DLT_ID_SIZE));
           buffer = static_cast<uint8_t *>(buffer) + DLT_ID_SIZE;
         }
 
@@ -171,8 +164,8 @@ public:
         auto const extendedHeader = static_cast<DltExtendedHeader *>(buffer);
         msin = extendedHeader->msin;
         noar = extendedHeader->noar;
-        apid = std::string_view{extendedHeader->apid, DLT_ID_SIZE};
-        ctid = std::string_view{extendedHeader->ctid, DLT_ID_SIZE};
+        apid = std::string_view{ extendedHeader->apid, DLT_ID_SIZE };
+        ctid = std::string_view{ extendedHeader->ctid, DLT_ID_SIZE };
         buffer = static_cast<uint8_t *>(buffer) + sizeof(DltExtendedHeader);
       }
       m_msins.emplace_back(msin);
@@ -183,17 +176,13 @@ public:
       // Payload
       /* calculate complete size of headers */
       auto const headerSize =
-          (uint32_t)(sizeof(DltStorageHeader) + sizeof(DltStandardHeader) +
-                     DLT_STANDARD_HEADER_EXTRA_SIZE(htyp) +
-                     (DLT_IS_HTYP_UEH(htyp) ? sizeof(DltExtendedHeader) : 0));
+        (uint32_t)(sizeof(DltStorageHeader) + sizeof(DltStandardHeader) + DLT_STANDARD_HEADER_EXTRA_SIZE(htyp)
+                   + (DLT_IS_HTYP_UEH(htyp) ? sizeof(DltExtendedHeader) : 0));
 
       /* calculate complete size of payload */
-      int32_t const dataSize = DLT_BETOH_16(len) +
-                               (int32_t)sizeof(DltStorageHeader) -
-                               static_cast<int32_t>(headerSize);
+      int32_t const dataSize = DLT_BETOH_16(len) + (int32_t)sizeof(DltStorageHeader) - static_cast<int32_t>(headerSize);
 
-      std::string_view payload{static_cast<char *>(buffer),
-                               static_cast<size_t>(dataSize)};
+      std::string_view payload{ static_cast<char *>(buffer), static_cast<size_t>(dataSize) };
       std::string_view service_name_id = "";
       std::string_view return_type_name = "";
       // non-verbose mode the payload buffer can be:
@@ -226,32 +215,25 @@ public:
           auto type_info_tmp = _dlt_msg_read_value<uint32_t>(payload);
           uint32_t type_info = DLT_ENDIAN_GET_32(htyp, type_info_tmp);
 
-          if ((type_info & DLT_TYPE_INFO_STRG) &&
-              (((type_info & DLT_TYPE_INFO_SCOD) == DLT_SCOD_ASCII) ||
-               ((type_info & DLT_TYPE_INFO_SCOD) == DLT_SCOD_UTF8))) {
+          if ((type_info & DLT_TYPE_INFO_STRG)
+              && (((type_info & DLT_TYPE_INFO_SCOD) == DLT_SCOD_ASCII)
+                  || ((type_info & DLT_TYPE_INFO_SCOD) == DLT_SCOD_UTF8))) {
 
             auto value = _dlt_msg_read_value<uint16_t>(payload);
             payload = payload;
 
           } else if (type_info & DLT_TYPE_INFO_BOOL) {
 
-            if (type_info & DLT_TYPE_INFO_VARI) {
-              throw std::runtime_error("Not implemented yet");
-            }
+            if (type_info & DLT_TYPE_INFO_VARI) { throw std::runtime_error("Not implemented yet"); }
 
             auto value = _dlt_msg_read_value<bool>(payload);
             payload = value ? "true" : "false";
 
-          } else if ((type_info & DLT_TYPE_INFO_SINT) ||
-                     (type_info & DLT_TYPE_INFO_UINT)) {
+          } else if ((type_info & DLT_TYPE_INFO_SINT) || (type_info & DLT_TYPE_INFO_UINT)) {
 
-            if (type_info & DLT_TYPE_INFO_VARI) {
-              throw std::runtime_error("Not implemented yet");
-            }
+            if (type_info & DLT_TYPE_INFO_VARI) { throw std::runtime_error("Not implemented yet"); }
 
-            if (type_info & DLT_TYPE_INFO_FIXP) {
-              throw std::runtime_error("Not implemented yet");
-            }
+            if (type_info & DLT_TYPE_INFO_FIXP) { throw std::runtime_error("Not implemented yet"); }
 
             switch (type_info & DLT_TYPE_INFO_TYLE) {
             case DLT_TYLE_8BIT: {
@@ -288,9 +270,7 @@ public:
             }
 
           } else if (type_info & DLT_TYPE_INFO_FLOA) {
-            if (type_info & DLT_TYPE_INFO_VARI) {
-              throw std::runtime_error("Not implemented yet");
-            }
+            if (type_info & DLT_TYPE_INFO_VARI) { throw std::runtime_error("Not implemented yet"); }
 
             switch (type_info & DLT_TYPE_INFO_TYLE) {
             case DLT_TYLE_8BIT: {
@@ -368,8 +348,7 @@ public:
   void print() {
     std::ostringstream os;
     for (size_t i = 0; i < m_size; ++i) {
-      auto mt =
-          message_type[DLT_GET_MSIN_MSTP(static_cast<int>(m_msins.at(i)))];
+      auto mt = message_type[DLT_GET_MSIN_MSTP(static_cast<int>(m_msins.at(i)))];
       auto id = DLT_GET_MSIN_MTIN(static_cast<int>(m_msins.at(i)));
       auto li = log_info[id];
       auto tt = trace_type[id];
@@ -382,12 +361,10 @@ public:
       os << "ECU: " << m_ecus.at(i) << ", ";
       os << "HTYP: " << static_cast<int>(m_htyps.at(i)) << ", ";
       os << "MCNT: " << static_cast<int>(m_mcnts.at(i)) << ", ";
-      os << "Length: " << m_lens.at(i) << " " << DLT_BETOH_16(m_lens.at(i))
-         << ", ";
+      os << "Length: " << m_lens.at(i) << " " << DLT_BETOH_16(m_lens.at(i)) << ", ";
       os << "SEID: " << m_seids.at(i) << ", ";
       os << "TMSP: " << m_tmsps.at(i) << ", ";
-      os << "MSIN: (" << mt << ", " << li << ", " << tt << ", " << ntt << ", "
-         << ct << "), ";
+      os << "MSIN: (" << mt << ", " << li << ", " << tt << ", " << ntt << ", " << ct << "), ";
       os << "NOAR: " << static_cast<int>(m_noars.at(i)) << ", ";
       os << "APID: " << m_apids.at(i) << ", ";
       os << "CTID: " << m_ctids.at(i) << ", ";
@@ -414,21 +391,16 @@ public:
       auto ntt = nw_trace_type[id];
       auto ct = control_type[id];
 
-      auto time = std::chrono::seconds{dlt.m_seconds.at(i)} +
-                  std::chrono::microseconds{dlt.m_microseconds.at(i)};
-      std::chrono::system_clock::time_point tp{time};
+      auto time = std::chrono::seconds{ dlt.m_seconds.at(i) } + std::chrono::microseconds{ dlt.m_microseconds.at(i) };
+      std::chrono::system_clock::time_point tp{ time };
       os << tp << "|";
       os << std::setw(10) << dlt.m_tmsps.at(i) << "|";
       os << std::setw(6) << static_cast<int>(dlt.m_mcnts.at(i)) << "|";
       os << std::setw(4) << dlt.m_ecus.at(i) << "|";
       os << std::setw(4) << dlt.m_apids.at(i) << "|";
       os << std::setw(4) << dlt.m_ctids.at(i) << "|";
-      os << std::setw(10)
-         << message_type[DLT_GET_MSIN_MSTP(static_cast<int>(dlt.m_msins.at(i)))]
-         << "|";
-      os << std::setw(10)
-         << log_info[DLT_GET_MSIN_MTIN(static_cast<int>(dlt.m_msins.at(i)))]
-         << "|";
+      os << std::setw(10) << message_type[DLT_GET_MSIN_MSTP(static_cast<int>(dlt.m_msins.at(i)))] << "|";
+      os << std::setw(10) << log_info[DLT_GET_MSIN_MTIN(static_cast<int>(dlt.m_msins.at(i)))] << "|";
       if (dlt._dlt_msg_is_nonverbose(dlt.m_htyps.at(i), dlt.m_msins.at(i))) {
         os << "N";
       } else {
@@ -446,25 +418,20 @@ public:
 
 private:
   bool _dlt_msg_is_nonverbose(int htyp, int msin) const {
-    return (!DLT_IS_HTYP_UEH(htyp) ||
-            (DLT_IS_HTYP_UEH(htyp) && !DLT_IS_MSIN_VERB(msin)));
+    return (!DLT_IS_HTYP_UEH(htyp) || (DLT_IS_HTYP_UEH(htyp) && !DLT_IS_MSIN_VERB(msin)));
   }
 
   bool _dlt_msg_is_control(int htyp, int msin) const {
-    return DLT_IS_HTYP_UEH(htyp) &&
-           (DLT_GET_MSIN_MSTP(msin) == DLT_TYPE_CONTROL);
+    return DLT_IS_HTYP_UEH(htyp) && (DLT_GET_MSIN_MSTP(msin) == DLT_TYPE_CONTROL);
   }
 
   bool _dlt_msg_is_control_response(int htyp, int msin) const {
-    return DLT_IS_HTYP_UEH(htyp) &&
-           (DLT_GET_MSIN_MSTP(msin) == DLT_TYPE_CONTROL) &&
-           (DLT_GET_MSIN_MTIN(msin) == DLT_CONTROL_RESPONSE);
+    return DLT_IS_HTYP_UEH(htyp) && (DLT_GET_MSIN_MSTP(msin) == DLT_TYPE_CONTROL)
+           && (DLT_GET_MSIN_MTIN(msin) == DLT_CONTROL_RESPONSE);
   }
 
-  template <typename T> T _dlt_msg_read_value(std::string_view &payload) {
-    if (payload.size() < sizeof(T)) {
-      throw std::runtime_error("Payload size is less than expected");
-    }
+  template<typename T> T _dlt_msg_read_value(std::string_view &payload) {
+    if (payload.size() < sizeof(T)) { throw std::runtime_error("Payload size is less than expected"); }
     auto dst = *reinterpret_cast<T *>(const_cast<char *>(payload.data()));
     payload.remove_prefix(sizeof(T));
     return dst;
@@ -476,7 +443,7 @@ void parse_dlt_explorer(std::filesystem::path const &path) {
 
   mapped_region region(m_file, read_only);
 
-  DLT dlt{std::move(region)};
+  DLT dlt{ std::move(region) };
   std::cout << dlt << '\n';
   // dlt.print();
 }
