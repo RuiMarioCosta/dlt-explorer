@@ -13,7 +13,7 @@ RUN apt install -y --no-install-recommends \
 RUN apt install -y --no-install-recommends gcc g++ gdb
 
 # Install clang
-RUN apt install -y --no-install-recommends clang lldb lld clang-tidy
+RUN apt install -y --no-install-recommends clang lldb lld clang-tidy clang-format
 
 # Install optional dependencies
 RUN apt install -y --no-install-recommends ccache cppcheck
