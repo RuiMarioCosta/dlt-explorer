@@ -1,12 +1,44 @@
 #include "buffer.h"
 
 #include <catch2/catch_test_macros.hpp>
+#include <fmt/base.h>
 
 #include <cstddef>
+#include <string_view>
+#include <utility>
 
-// struct TestType{
-//   TestType(){}
-// };
+
+struct TestType
+{
+  TestType() { fmt::println("------ctor"); }
+  TestType(TestType const & /*t*/) { fmt::println("------copy ctor"); }
+  TestType &operator=(TestType const &rhs)
+  {
+    fmt::println("------copy assign");
+    TestType temp = rhs;
+    *this = std::move(temp);
+    return *this;
+  }
+  TestType(TestType && /*t*/) noexcept { fmt::println("------move ctor"); }
+  TestType &operator=(TestType && /*t*/) noexcept
+  {
+    fmt::println("------move assign");
+    return *this;
+  }
+  ~TestType() { fmt::println("------dtor"); }
+
+  static std::string_view print() { return "test type"; }
+};
+
+template<> struct fmt::formatter<TestType> : formatter<string_view>
+{
+  static auto format(const TestType &testType, format_context &ctx)
+  {
+    return fmt::format_to(ctx.out(), "{}", testType.print());
+    // return formatter<string_view>::format(testType.print(), ctx);
+  }
+};
+
 
 SCENARIO("Buffer constructor")
 {
@@ -157,6 +189,19 @@ SCENARIO("Buffer can store data.")
         REQUIRE(buffer.capacity() == 1024);
         REQUIRE(result == "0b101");
       }
+    }
+  }
+
+  GIVEN("A Buffer with big enough space")
+  {
+    size_t const capacity = 1024;
+    Buffer buffer{ capacity };
+
+    WHEN("the TestType is stored")
+    {
+      buffer.store(TestType{});
+
+      THEN("no ctor are called") {}
     }
   }
 }
