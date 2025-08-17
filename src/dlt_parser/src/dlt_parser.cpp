@@ -19,11 +19,6 @@
 
 using namespace boost::interprocess;
 
-template<typename T> void print(std::span<T> data) {
-  for (const auto &c : data) { std::cout << c; }
-  std::cout << '\n';
-}
-
 struct RawData {
   std::string_view data;
 };
