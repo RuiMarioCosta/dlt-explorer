@@ -3,17 +3,19 @@ ARG TAG
 
 FROM ${IMAGE}:${TAG}
 
-RUN apt update
-RUN apt upgrade -y
-RUN apt install -y --no-install-recommends \
-  sudo software-properties-common vim less openssl unzip \
-  wget git curl gzip tar cmake ninja-build
+RUN apt update && export DEBIAN_FRONTEND=noninteractive && \
+  apt upgrade -y && \
+  apt install -y --no-install-recommends \
+    sudo  software-properties-common vim less openssl unzip \
+    wget git curl gzip tar ninja-build
 
 # Install gcc
 RUN apt install -y --no-install-recommends gcc g++ gdb
 
 # Install clang
-RUN apt install -y --no-install-recommends clang lldb lld clang-tidy clang-format
+RUN apt install -y --no-install-recommends \
+  clang libclang-dev llvm-dev lld libclang-rt-dev \
+  clangd clang-tidy clang-format lldb
 
 # Install optional dependencies
 RUN apt install -y --no-install-recommends ccache cppcheck
@@ -26,7 +28,10 @@ RUN apt install -y --no-install-recommends python3 python3-pip pipx black
 RUN pipx install cmakelang
 
 # Install lazyvim and dependencies
-RUN apt install -y --no-install-recommends ripgrep fzf luarocks fd-find npm
+RUN apt install -y --no-install-recommends ripgrep fzf luarocks fd-find
+
+# Install cmake and utils
+RUN apt install -y --no-install-recommends cmake cmake-curses-gui
 
 # Install utils
 RUN apt install -y --no-install-recommends xsel

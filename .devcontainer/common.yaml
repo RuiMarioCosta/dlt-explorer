@@ -7,7 +7,6 @@ x-setup: &setup
   environment: &environment
     SSH_AUTH_SOCK: /ssh-agent
     DISPLAY: ${DISPLAY}
-  container_name: ${COMPOSE_PROJECT_NAME}-${USER}
   privileged: true
 
 x-build: &build

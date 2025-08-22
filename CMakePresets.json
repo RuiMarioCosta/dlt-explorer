@@ -185,6 +185,10 @@
     {
       "name": "unixlike-gcc-debug",
       "configurePreset": "unixlike-gcc-debug"
+    },
+    {
+      "name": "unixlike-clang-debug",
+      "configurePreset": "unixlike-clang-debug"
     }
   ],
   "testPresets": [
