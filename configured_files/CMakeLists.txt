@@ -4,4 +4,7 @@
 # you are developing a library
 configure_file("config.hpp.in" "${CMAKE_BINARY_DIR}/configured_files/include/internal_use_only/config.hpp" ESCAPE_QUOTES)
 
+add_library(config INTERFACE)
+add_library(dlt_explorer::config ALIAS config)
+target_include_system_directories(config INTERFACE "${CMAKE_BINARY_DIR}/configured_files/include")
 

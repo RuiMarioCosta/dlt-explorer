@@ -104,7 +104,7 @@ include(cmake/PackageProject.cmake)
 # we know we want to ship
 dlt_explorer_package_project(
   TARGETS
-  intro
+  main
   dlt_explorer_options
   dlt_explorer_warnings
   # FIXME: this does not work! CK
