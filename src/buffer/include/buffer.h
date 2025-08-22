@@ -12,7 +12,7 @@ struct Hex {
 };
 
 template<> struct fmt::formatter<Hex> : formatter<string_view> {
-  auto format(Hex hex, format_context &ctx) const { return fmt::format_to(ctx.out(), "0x{:x}", hex.value); }
+  auto format(Hex hex, format_context &ctx) const { return fmt::format_to(ctx.out(), "{:#x}", hex.value); }
 };
 
 
@@ -21,7 +21,7 @@ struct Bin {
 };
 
 template<> struct fmt::formatter<Bin> : formatter<string_view> {
-  auto format(Bin binary, format_context &ctx) const { return fmt::format_to(ctx.out(), "0b{:b}", binary.value); }
+  auto format(Bin binary, format_context &ctx) const { return fmt::format_to(ctx.out(), "{:#b}", binary.value); }
 };
 
 
@@ -29,6 +29,7 @@ class Buffer {
   std::vector<char> m_buffer;
 
 public:
+  BUFFER_EXPORT Buffer() = default;
   explicit BUFFER_EXPORT Buffer(size_t capacity);
 
   [[nodiscard]] BUFFER_EXPORT size_t size() const;

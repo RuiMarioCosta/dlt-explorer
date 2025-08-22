@@ -1,14 +1,17 @@
+#include "adapter_export.h"
+
 #include <filesystem>
 
 #include "dlt_common.h"
 #include "dlt_protocol.h"
 
-extern const char *message_type[8];
-extern const char *log_info[16];
-extern const char *trace_type[16];
-extern const char *nw_trace_type[16];
-extern const char *control_type[16];
-static const char *service_id_name[21] = { "",
+[[maybe_unused]] extern const char *message_type[8];
+[[maybe_unused]] extern const char *log_info[16];
+[[maybe_unused]] extern const char *trace_type[16];
+[[maybe_unused]] extern const char *nw_trace_type[16];
+[[maybe_unused]] extern const char *control_type[16];
+
+[[maybe_unused]] static const char *service_id_name[21] = {"",
   "set_log_level",
   "set_trace_status",
   "get_log_info",
@@ -28,12 +31,13 @@ static const char *service_id_name[21] = { "",
   "set_default_log_level",
   "set_default_trace_status",
   "get_software_version",
-  "message_buffer_overflow" };
-static const char
-  *return_type[9] = { "ok", "not_supported", "error", "perm_denied", "warning", "", "", "", "no_matching_context_id" };
+  "message_buffer_overflow"};
+
+[[maybe_unused]] static const char *return_type[9] =
+  {"ok", "not_supported", "error", "perm_denied", "warning", "", "", "", "no_matching_context_id"};
 
 
 /**
- * Parse DLT file as done in dlt-daemon
+ * Parse DLT file using dlt-daemon functions
  */
-void parse_dlt_daemon(std::filesystem::path const &path);
+void ADAPTER_EXPORT parse_dlt_daemon(std::filesystem::path const &path);
