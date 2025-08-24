@@ -31,15 +31,24 @@ include(${Catch2_SOURCE_DIR}/extras/Catch.cmake)
 
 add_executable(tests
   unittests/test_buffer.cpp
-  # unittests/test_dlt_parser.cpp
+  unittests/test_dlt_parser.cpp
 )
-target_link_libraries(
-  tests
-  PRIVATE dlt_explorer::dlt_explorer_warnings
-          dlt_explorer::dlt_explorer_options
-          dlt_explorer::buffer
-          # dlt_explorer::dlt_parser
-          Catch2::Catch2WithMain)
+target_link_libraries(tests
+  PRIVATE
+    dlt_explorer::dlt_explorer_warnings
+    dlt_explorer::dlt_explorer_options
+    dlt_explorer::buffer
+    dlt_explorer::dlt_parser
+    Catch2::Catch2WithMain
+)
+target_compile_definitions(tests
+  PRIVATE
+    DATA_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+)
+file(GLOB TEST_FILES "${CMAKE_CURRENT_SOURCE_DIR}/data/*.dlt")
+foreach(file  ${TEST_FILES})
+  configure_file(${file} ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
+endforeach()
 
 if(WIN32 AND BUILD_SHARED_LIBS)
   add_custom_command(
