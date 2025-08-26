@@ -72,11 +72,9 @@ DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
   m_buffer = Buffer{m_region.get_size()};
   std::span<uint8_t> const dlt_span{static_cast<uint8_t *>(m_region.get_address()), m_region.get_size()};
 
+  auto buffer_iter = m_buffer.begin();
   auto iterator = dlt_span.begin();
   auto const end = dlt_span.cend();
-
-  std::vector<all_t> values_of_payloads;
-  values_of_payloads.reserve(64);// used to store payload values and storing them all together
 
   while (iterator < end) {
     // The bit_cast from pointer to pointer are UB and the safe approach would be throw use
