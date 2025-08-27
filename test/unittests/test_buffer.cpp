@@ -2,10 +2,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <fmt/base.h>
+#include <fmt/format.h>
 
 #include <cstddef>
 #include <string_view>
-#include <utility>
+#include <vector>
 
 
 using namespace std::string_view_literals;
@@ -163,6 +164,19 @@ SCENARIO("Buffer can store data") {
         REQUIRE(buffer.size() == 9);
         REQUIRE(buffer.capacity() == 1024);
         REQUIRE(result == "[1, 2, 3]");
+      }
+    }
+
+    WHEN("two integers are stored") {
+      int const value1 = 123;
+      int const value2 = 456;
+      auto end = buffer.store(value1, value2);
+      std::string_view result{begin, end};
+
+      THEN("characters '123 456' are stored in Buffer") {
+        REQUIRE(buffer.size() == 7);
+        REQUIRE(buffer.capacity() == 1024);
+        REQUIRE(result == "123 456");
       }
     }
   }

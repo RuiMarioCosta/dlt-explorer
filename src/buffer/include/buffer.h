@@ -58,12 +58,11 @@ public:
   [[nodiscard]] BUFFER_EXPORT size_t capacity() const;
   [[nodiscard]] BUFFER_EXPORT iterator begin();
   [[nodiscard]] BUFFER_EXPORT const_iterator cbegin() const;
-  [[nodiscard]] BUFFER_EXPORT const_iterator iter() const;
 
   template<typename T>
-  const_iterator store(T &&args) {
+  iterator store(T &&args) {
     fmt::format_to(std::back_inserter(m_buffer), "{}", std::forward<T>(args));
-    return iter();
+    return _iterator();
   }
 
   // template<typename T>
@@ -78,10 +77,14 @@ public:
   //   fmt::format_to(std::back_inserter(m_buffer), "{}", fmt::join(std::forward<T>(args), " "));
   //   return iter();
   // }
-  //
-  // const_iterator store(auto &&...args) {
-  //   std::array<std::string, sizeof...(args)> parts{fmt::format("{}", std::forward<decltype(args)>(args))...};
-  //   fmt::format_to(std::back_inserter(m_buffer), "{}", fmt::join(parts, " "));
-  //   return iter();
-  // }
+
+  iterator store(auto &&...args) {
+    std::array<std::string, sizeof...(args)> parts{fmt::format("{}", std::forward<decltype(args)>(args))...};
+    fmt::format_to(std::back_inserter(m_buffer), "{}", fmt::join(parts, " "));
+    return _iterator();
+  }
+
+private:
+  [[nodiscard]] BUFFER_EXPORT iterator _iterator();
+  [[nodiscard]] BUFFER_EXPORT const_iterator _citerator() const;
 };
