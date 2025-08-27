@@ -56,7 +56,7 @@ void setup_subcommand_gui(CLI::App &app) {
   auto options = std::make_shared<Options>();
 
   auto *sub = app.add_subcommand("gui", "Start GUI");
-  sub->add_option("-p,--path", options->dlt_path, "DLT file path")->required()->check(CLI::ExistingFile);
+  sub->add_option("-p,--path", options->dlt_path, "DLT file path");
   sub->add_option("-f,--filter", options->dlt_filter, "DLT filter path");
 
   sub->callback([options]() {
