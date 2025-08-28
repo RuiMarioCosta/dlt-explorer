@@ -7,10 +7,13 @@ if(dlt_explorer_ENABLE_DLT_DAEMON)
   target_link_system_libraries(adapter PUBLIC dlt)
   target_compile_definitions(adapter
     PUBLIC
-      $<$<BOOL:${ENABLE_DLT_DAEMON}>:ENABLE_DLT_DAEMON>
+      $<$<BOOL:${dlt_explorer_ENABLE_DLT_DAEMON}>:ENABLE_DLT_DAEMON>
   )
 else()
-  add_library(adapter without_dlt_daemon/src/adapter.cpp)
+  add_library(adapter
+    without_dlt_daemon/src/adapter.cpp
+    without_dlt_daemon/src/dlt_common.cpp
+  )
   target_include_directories(
     adapter
     PUBLIC

@@ -1,3 +1,5 @@
+#pragma once
+
 #include "adapter_export.h"
 
 #include <filesystem>
