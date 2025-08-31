@@ -32,6 +32,38 @@ function(dlt_explorer_setup_dependencies)
     cpmaddpackage("gh:CLIUtils/CLI11@2.5.0")
   endif()
 
+  if(NOT TARGET Boost::assert)
+    cpmaddpackage("gh:boostorg/assert#boost-1.89.0")
+  endif()
+
+  if(NOT TARGET Boost::config)
+    cpmaddpackage("gh:boostorg/config#boost-1.89.0")
+  endif()
+
+  if(NOT TARGET Boost::container)
+    cpmaddpackage("gh:boostorg/container#boost-1.89.0")
+  endif()
+
+  if(NOT TARGET Boost::intrusive)
+    cpmaddpackage("gh:boostorg/intrusive#boost-1.89.0")
+  endif()
+
+  if(NOT TARGET Boost::move)
+    cpmaddpackage("gh:boostorg/move#boost-1.89.0")
+  endif()
+
+  if(NOT TARGET Boost::winapi)
+    cpmaddpackage("gh:boostorg/winapi#boost-1.89.0")
+  endif()
+
+  if(NOT TARGET Boost::predef)
+    cpmaddpackage("gh:boostorg/predef#boost-1.89.0")
+  endif()
+
+  if(NOT TARGET Boost::interprocess)
+    cpmaddpackage("gh:boostorg/interprocess#boost-1.89.0")
+  endif()
+
   if(dlt_explorer_ENABLE_DLT_DAEMON)
     cpmaddpackage("gh:COVESA/dlt-daemon@2.18.10")
   endif()

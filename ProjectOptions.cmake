@@ -96,7 +96,7 @@ macro(dlt_explorer_setup_options)
     option(dlt_explorer_ENABLE_CPPCHECK "Enable cpp-check analysis" ON)
     option(dlt_explorer_ENABLE_PCH "Enable precompiled headers" OFF)
     option(dlt_explorer_ENABLE_CACHE "Enable ccache" ON)
-    option(dlt_explorer_ENABLE_DLT_DAEMON "Build using dlt-daemon external dependency" ON)
+    option(dlt_explorer_ENABLE_DLT_DAEMON "Build using dlt-daemon external dependency" OFF)
     option(dlt_explorer_ENABLE_BENCHMARK "Build benchmark" OFF)
   endif()
 

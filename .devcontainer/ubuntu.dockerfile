@@ -20,9 +20,6 @@ RUN apt install -y --no-install-recommends \
 # Install optional dependencies
 RUN apt install -y --no-install-recommends ccache cppcheck
 
-# Install project dependencies
-RUN apt install -y --no-install-recommends libboost-all-dev libgtest-dev
-
 # Install python
 RUN apt install -y --no-install-recommends python3 python3-pip pipx black
 RUN pipx install cmakelang
