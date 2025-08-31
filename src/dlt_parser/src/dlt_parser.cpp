@@ -1,8 +1,13 @@
 #include "dlt_parser.h"
 
-#include "adapter.h"
 #include "buffer.h"
 
+/*
+ * There are 2 versions of the following 4 headers: one that uses the external dependency, dlt-daemon, and another that
+ * is a copy of dlt-daemon but with only the minimum and adapted to C++. The former only works in linux OS therefore the
+ * later versions was created to allow portability across operating systems.
+ */
+#include "adapter.h"
 #include "dlt_common.h"
 #include "dlt_protocol.h"
 #include "dlt_types.h"
@@ -37,15 +42,15 @@ using namespace boost::interprocess;
 
 namespace {
 
-[[nodiscard]] bool _dlt_msg_is_nonverbose(int htyp, int msin) {
+[[nodiscard]] bool _dlt_msg_is_nonverbose(uint32_t htyp, uint32_t msin) {
   return (!DLT_IS_HTYP_UEH(htyp) || (DLT_IS_HTYP_UEH(htyp) && !DLT_IS_MSIN_VERB(msin)));
 }
 
-bool _dlt_msg_is_control(int htyp, int msin) {
+bool _dlt_msg_is_control(uint32_t htyp, uint32_t msin) {
   return DLT_IS_HTYP_UEH(htyp) && (DLT_GET_MSIN_MSTP(msin) == DLT_TYPE_CONTROL);
 }
 
-bool _dlt_msg_is_control_response(int htyp, int msin) {
+bool _dlt_msg_is_control_response(uint32_t htyp, uint32_t msin) {
   return DLT_IS_HTYP_UEH(htyp) && (DLT_GET_MSIN_MSTP(msin) == DLT_TYPE_CONTROL)
          && (DLT_GET_MSIN_MTIN(msin) == DLT_CONTROL_RESPONSE);
 }
@@ -153,8 +158,9 @@ DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
                             + (DLT_IS_HTYP_UEH(htyp) ? sizeof(DltExtendedHeader) : 0));
 
     /* calculate complete size of payload */
-    int32_t const data_size =
-      DLT_BETOH_16(len) + static_cast<int32_t>(sizeof(DltStorageHeader)) - static_cast<int32_t>(header_size);
+    // NOTE: cast to uint32_t needed because bitwise promotes unsigned types smaller than an int to an int
+    int32_t const data_size = static_cast<int32_t>(DLT_BETOH_16(static_cast<uint32_t>(len)))
+                              + static_cast<int32_t>(sizeof(DltStorageHeader)) - static_cast<int32_t>(header_size);
 
     auto buffer_iter_begin = buffer_iter;// save current buffer iterator to later construct the string_view
     std::string_view payload{std::bit_cast<char *>(&*iterator), static_cast<size_t>(data_size)};
@@ -219,30 +225,27 @@ DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
           switch (type_info & DLT_TYPE_INFO_TYLE) {
           case DLT_TYLE_8BIT: {
             auto value = dlt_msg_read_value<uint8_t>(payload);
-            // payload = static_cast<int64_t>(value);
             buffer_iter = m_buffer.store(value);
             break;
           }
           case DLT_TYLE_16BIT: {
             if ((type_info & DLT_TYPE_INFO_SINT) != 0U) {
-              auto value_tmp = dlt_msg_read_value<int16_t>(payload);
-              buffer_iter = m_buffer.store(DLT_ENDIAN_GET_16(htyp, value_tmp));
+              auto value_tmp = static_cast<uint32_t>(dlt_msg_read_value<int16_t>(payload));
+              auto value = static_cast<int16_t>(DLT_ENDIAN_GET_16(htyp, value_tmp));
+              buffer_iter = m_buffer.store(value);
             } else {
-              auto value_tmp = dlt_msg_read_value<uint16_t>(payload);
-              // payload = DLT_ENDIAN_GET_16(htyp, value_tmp);
+              auto value_tmp = static_cast<uint32_t>(dlt_msg_read_value<uint16_t>(payload));
               buffer_iter = m_buffer.store(DLT_ENDIAN_GET_16(htyp, value_tmp));
             }
             break;
           }
           case DLT_TYLE_32BIT: {
             auto value_tmp = dlt_msg_read_value<uint32_t>(payload);
-            // payload = DLT_ENDIAN_GET_32(htyp, value_tmp);
             buffer_iter = m_buffer.store(DLT_ENDIAN_GET_32(htyp, value_tmp));
             break;
           }
           case DLT_TYLE_64BIT: {
             auto value_tmp = dlt_msg_read_value<uint64_t>(payload);
-            // payload = DLT_ENDIAN_GET_64(htyp, value_tmp);
             buffer_iter = m_buffer.store(DLT_ENDIAN_GET_64(htyp, value_tmp));
             break;
           }
@@ -260,7 +263,6 @@ DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
           switch (type_info & DLT_TYPE_INFO_TYLE) {
           case DLT_TYLE_8BIT: {
             auto value = dlt_msg_read_value<uint8_t>(payload);
-            // payload = static_cast<int64_t>(value);
             buffer_iter = m_buffer.store(value);
             break;
           }
@@ -275,7 +277,6 @@ DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
             auto value_uint32 = std::bit_cast<uint32_t>(value);
             auto value_uint32_swap = DLT_ENDIAN_GET_32(htyp, value_uint32);
             auto value_corrected = std::bit_cast<float32_t>(value_uint32_swap);
-            // payload = value_corrected;
             buffer_iter = m_buffer.store(value_corrected);
             break;
           }
@@ -284,7 +285,6 @@ DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
             auto value_uint64 = std::bit_cast<uint64_t>(value);
             auto value_uint64_swap = DLT_ENDIAN_GET_64(htyp, value_uint64);
             auto value_corrected = std::bit_cast<float64_t>(value_uint64_swap);
-            // payload = value_corrected;
             buffer_iter = m_buffer.store(value_corrected);
             break;
           }

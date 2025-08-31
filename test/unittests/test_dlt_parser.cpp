@@ -17,14 +17,14 @@ using namespace Catch::Matchers;
 
 
 struct EqualsStringViewMatcher : Catch::Matchers::MatcherGenericBase {
-  explicit EqualsStringViewMatcher(std::string_view value) : value{value} {}
+  explicit EqualsStringViewMatcher(std::string_view value) : m_value{value} {}
 
-  bool match(std::string_view const &other) const { return value == other; }
+  bool match(std::string_view const &other) const { return m_value == other; }
 
-  std::string describe() const override { return "Equals: " + std::string{value}; }
+  std::string describe() const override { return "Equals: " + std::string{m_value}; }
 
 private:
-  std::string_view value;
+  std::string_view m_value;
 };
 
 auto Equals(const std::string_view &value) -> EqualsStringViewMatcher { return EqualsStringViewMatcher{value}; }

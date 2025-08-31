@@ -1,5 +1,3 @@
-find_package(Boost REQUIRED)
-
 add_library(dlt_parser src/dlt_parser.cpp)
 add_library(dlt_explorer::dlt_parser ALIAS dlt_parser)
 
@@ -11,7 +9,7 @@ target_include_directories(
   PUBLIC
     include
     ${CMAKE_CURRENT_BINARY_DIR}
-    ${Boost_INCLUDE_DIRS})
+)
 
 target_link_libraries(dlt_parser
   PUBLIC
@@ -20,6 +18,11 @@ target_link_libraries(dlt_parser
     adapter
     dlt_explorer::dlt_explorer_options
     dlt_explorer::dlt_explorer_warnings
+)
+
+target_link_system_libraries(dlt_parser
+  PUBLIC
+    Boost::interprocess
 )
 
 if(ENABLE_DLT_DAEMON)
