@@ -27,8 +27,8 @@ include(GenerateExportHeader)
 generate_export_header(adapter)
 
 target_include_directories(adapter
-    PUBLIC
-      ${CMAKE_CURRENT_BINARY_DIR}
+  PUBLIC
+    ${CMAKE_CURRENT_BINARY_DIR}
 )
 target_link_libraries(adapter
   PRIVATE

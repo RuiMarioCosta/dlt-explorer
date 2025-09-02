@@ -61,7 +61,7 @@ T dlt_msg_read_value(std::string_view &payload) {
   if (payload.size() < sizeof(T)) { throw std::runtime_error("Payload size is less than expected"); }
 
   T value;
-  std::memcpy(&value, payload.data(), sizeof(value));
+  std::memcpy(&value, payload.data(), sizeof(value));// NOLINT(bugprone-suspicious-stringview-data-usage)
   payload.remove_prefix(sizeof(T));
   return value;
 }

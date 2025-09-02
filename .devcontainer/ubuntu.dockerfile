@@ -7,7 +7,7 @@ RUN apt update && export DEBIAN_FRONTEND=noninteractive && \
   apt upgrade -y && \
   apt install -y --no-install-recommends \
     sudo  software-properties-common vim less openssl unzip \
-    wget git curl gzip tar ninja-build
+    wget git curl gzip tar ninja-build openssh-client
 
 # Install gcc
 RUN apt install -y --no-install-recommends gcc g++ gdb

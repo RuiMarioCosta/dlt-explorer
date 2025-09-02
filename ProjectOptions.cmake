@@ -151,6 +151,10 @@ macro(dlt_explorer_global_options)
     message("${dlt_explorer_ENABLE_HARDENING} ${ENABLE_UBSAN_MINIMAL_RUNTIME} ${dlt_explorer_ENABLE_SANITIZER_UNDEFINED}")
     dlt_explorer_enable_hardening(dlt_explorer_options ON ${ENABLE_UBSAN_MINIMAL_RUNTIME})
   endif()
+
+  if(dlt_explorer_ENABLE_DLT_DAEMON)
+    option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
+  endif()
 endmacro()
 
 macro(dlt_explorer_local_options)
