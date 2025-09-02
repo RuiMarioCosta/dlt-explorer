@@ -31,14 +31,15 @@
 #include <utility>
 #include <vector>
 
-template<std::size_t Width, std::size_t Height> struct GameBoard {
+template<std::size_t Width, std::size_t Height>
+struct GameBoard {
   static constexpr std::size_t width = Width;
   static constexpr std::size_t height = Height;
 
   std::array<std::array<std::string, height>, width> strings;
   std::array<std::array<bool, height>, width> values{};
 
-  std::size_t move_count{ 0 };
+  std::size_t move_count{0};
 
   std::string &get_string(std::size_t cur_x, std::size_t cur_y) { return strings.at(cur_x).at(cur_y); }
 
@@ -139,7 +140,7 @@ void consequence_game() {
       rows.push_back(ftxui::hbox(std::move(row)));
     }
 
-    rows.push_back(ftxui::hbox({ quit_button->Render() }));
+    rows.push_back(ftxui::hbox({quit_button->Render()}));
 
     return ftxui::vbox(std::move(rows));
   };
@@ -148,7 +149,7 @@ void consequence_game() {
   static constexpr int randomization_iterations = 100;
   static constexpr int random_seed = 42;
 
-  std::mt19937 gen32{ random_seed };// NOLINT fixed seed
+  std::mt19937 gen32{random_seed};// NOLINT fixed seed
 
   // NOLINTNEXTLINE This cannot be const
   std::uniform_int_distribution<std::size_t> cur_x(static_cast<std::size_t>(0), game_board.width - 1);
@@ -170,9 +171,9 @@ void consequence_game() {
 }// namespace
 
 struct Color {
-  lefticus::tools::uint_np8_t R{ static_cast<std::uint8_t>(0) };
-  lefticus::tools::uint_np8_t G{ static_cast<std::uint8_t>(0) };
-  lefticus::tools::uint_np8_t B{ static_cast<std::uint8_t>(0) };
+  lefticus::tools::uint_np8_t R{static_cast<std::uint8_t>(0)};
+  lefticus::tools::uint_np8_t G{static_cast<std::uint8_t>(0)};
+  lefticus::tools::uint_np8_t B{static_cast<std::uint8_t>(0)};
 };
 
 // A simple way of representing a bitmap on screen using only characters
@@ -194,8 +195,8 @@ struct Bitmap : ftxui::Node {
         pixel.character = "▄";
         const auto &top_color = at(cur_x, cur_y * 2);
         const auto &bottom_color = at(cur_x, (cur_y * 2) + 1);
-        pixel.background_color = ftxui::Color{ top_color.R.get(), top_color.G.get(), top_color.B.get() };
-        pixel.foreground_color = ftxui::Color{ bottom_color.R.get(), bottom_color.G.get(), bottom_color.B.get() };
+        pixel.background_color = ftxui::Color{top_color.R.get(), top_color.G.get(), top_color.B.get()};
+        pixel.foreground_color = ftxui::Color{bottom_color.R.get(), bottom_color.G.get(), bottom_color.B.get()};
       }
     }
   }
@@ -284,10 +285,10 @@ void game_iteration_canvas() {
     last_time = new_time;
 
     // now actually draw the game elements
-    return ftxui::hbox({ bm | ftxui::border,
-      ftxui::vbox({ ftxui::text("Frame: " + std::to_string(counter)),
+    return ftxui::hbox({bm | ftxui::border,
+      ftxui::vbox({ftxui::text("Frame: " + std::to_string(counter)),
         ftxui::text("FPS: " + std::to_string(fps)),
-        small_bm | ftxui::border }) });
+        small_bm | ftxui::border})});
   };
 
   auto renderer = ftxui::Renderer(make_layout);
@@ -315,8 +316,7 @@ void game_iteration_canvas() {
 // NOLINTNEXTLINE(bugprone-exception-escape)
 int main(int argc, const char **argv) {
   try {
-    CLI::App app{ fmt::format(
-      "{} version {}", dlt_explorer::cmake::project_name, dlt_explorer::cmake::project_version) };
+    CLI::App app{fmt::format("{} version {}", dlt_explorer::cmake::project_name, dlt_explorer::cmake::project_version)};
 
     std::optional<std::string> message;
     app.add_option("-m,--message", message, "A message to print back out");

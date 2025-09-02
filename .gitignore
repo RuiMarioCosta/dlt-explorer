@@ -39,3 +39,6 @@ Thumbs.db
 
 # Cache files
 examples/index/
+
+# CMake generated files
+__cmake_systeminformation/
