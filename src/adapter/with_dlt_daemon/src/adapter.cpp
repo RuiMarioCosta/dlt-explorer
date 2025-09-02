@@ -9,7 +9,7 @@ constexpr int DLT_DAEMON_TEXTSIZE = 10024;
 
 void parse_dlt_daemon(std::filesystem::path const &path) {
   DltFile file;
-  int const verbose{ 0 };
+  int const verbose{0};
   static std::array<char, DLT_DAEMON_TEXTSIZE> text;
   // static char text[DLT_DAEMON_TEXTSIZE];
 
