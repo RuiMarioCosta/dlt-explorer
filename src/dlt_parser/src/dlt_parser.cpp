@@ -42,15 +42,15 @@ using namespace boost::interprocess;
 
 namespace {
 
-[[nodiscard]] bool _dlt_msg_is_nonverbose(uint32_t htyp, uint32_t msin) {
+[[nodiscard]] bool dlt_msg_is_nonverbose(uint32_t htyp, uint32_t msin) {
   return (!DLT_IS_HTYP_UEH(htyp) || (DLT_IS_HTYP_UEH(htyp) && !DLT_IS_MSIN_VERB(msin)));
 }
 
-bool _dlt_msg_is_control(uint32_t htyp, uint32_t msin) {
+bool dlt_msg_is_control(uint32_t htyp, uint32_t msin) {
   return DLT_IS_HTYP_UEH(htyp) && (DLT_GET_MSIN_MSTP(msin) == DLT_TYPE_CONTROL);
 }
 
-bool _dlt_msg_is_control_response(uint32_t htyp, uint32_t msin) {
+bool dlt_msg_is_control_response(uint32_t htyp, uint32_t msin) {
   return DLT_IS_HTYP_UEH(htyp) && (DLT_GET_MSIN_MSTP(msin) == DLT_TYPE_CONTROL)
          && (DLT_GET_MSIN_MTIN(msin) == DLT_CONTROL_RESPONSE);
 }
@@ -167,14 +167,14 @@ DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
     std::advance(iterator, data_size);
     std::string_view service_name;
     std::string_view return_type_name;
-    if (_dlt_msg_is_nonverbose(htyp, msin)) {
+    if (dlt_msg_is_nonverbose(htyp, msin)) {
       // non-verbose mode the payload buffer can be:
       // | service id name | return type | payload |
 
       // determine service id name
       auto const id_tmp = dlt_msg_read_value<uint32_t>(payload);
       auto const id_value = DLT_ENDIAN_GET_32(htyp, id_tmp);
-      if (_dlt_msg_is_control(htyp, msin) && id_value < DLT_SERVICE_ID_LAST_ENTRY) {
+      if (dlt_msg_is_control(htyp, msin) && id_value < DLT_SERVICE_ID_LAST_ENTRY) {
         // Possible out of bounds if id > service_id_name.size()
         // The check is ignored in favor of  performance
         service_name = service_id_name[id_value];// NOLINT
@@ -183,7 +183,7 @@ DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
       }
 
       // determine return type name
-      if (_dlt_msg_is_control_response(htyp, msin)) {
+      if (dlt_msg_is_control_response(htyp, msin)) {
         auto retval = dlt_msg_read_value<uint8_t>(payload);
         // Possible out of bounds if id > service_id_name.size()
         // The check is ignored in favor of  performance
@@ -273,18 +273,18 @@ DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
             break;
           }
           case DLT_TYLE_32BIT: {
-            auto value = dlt_msg_read_value<float32_t>(payload);
+            auto value = dlt_msg_read_value<float>(payload);
             auto value_uint32 = std::bit_cast<uint32_t>(value);
             auto value_uint32_swap = DLT_ENDIAN_GET_32(htyp, value_uint32);
-            auto value_corrected = std::bit_cast<float32_t>(value_uint32_swap);
+            auto value_corrected = std::bit_cast<float>(value_uint32_swap);
             buffer_iter = m_buffer.store(value_corrected);
             break;
           }
           case DLT_TYLE_64BIT: {
-            auto value = dlt_msg_read_value<float64_t>(payload);
+            auto value = dlt_msg_read_value<double>(payload);
             auto value_uint64 = std::bit_cast<uint64_t>(value);
             auto value_uint64_swap = DLT_ENDIAN_GET_64(htyp, value_uint64);
-            auto value_corrected = std::bit_cast<float64_t>(value_uint64_swap);
+            auto value_corrected = std::bit_cast<double>(value_uint64_swap);
             buffer_iter = m_buffer.store(value_corrected);
             break;
           }
