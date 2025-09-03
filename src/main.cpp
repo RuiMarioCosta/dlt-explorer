@@ -47,7 +47,8 @@ void setup_subcommand_term(CLI::App &app) {
     if (options->version1) {
       parse_dlt_daemon(options->dlt_path);
     } else {
-      DLT(options->dlt_path);
+      DLT const dlt{options->dlt_path};
+      fmt::println("{}", dlt.payloads());
     }
   });
 }

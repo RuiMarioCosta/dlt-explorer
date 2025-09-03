@@ -31,8 +31,8 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
+          - windows-latest
           # - macos-latest
-          # - windows-latest
         compiler:
           # you can specify the version after `-` like "llvm-15.0.2".
           - llvm-19.1.1
@@ -48,10 +48,10 @@ jobs:
         build_shared:
           - OFF
 
-        # exclude:
-        #   # mingw is determined by this author to be too buggy to support
-        #   - os: windows-latest
-        #     compiler: gcc-14
+        exclude:
+          # mingw is determined to be too buggy to support
+          - os: windows-latest
+            compiler: gcc-14
 
         include:
           # Add appropriate variables for gcov version required. This will intentionally break
@@ -80,7 +80,7 @@ jobs:
           #   gcov_executable: gcov-14
           #   packaging_maintainer_mode: On
           #   enable_ipo: Off
-          #
+
           # # Windows msvc builds
           # - os: windows-latest
           #   compiler: msvc

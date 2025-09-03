@@ -4,7 +4,10 @@
 #include <catch2/matchers/catch_matchers.hpp>
 #include <catch2/matchers/catch_matchers_quantifiers.hpp>
 #include <catch2/matchers/catch_matchers_range_equals.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <catch2/matchers/catch_matchers_templated.hpp>
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include <filesystem>
 #include <ranges>
@@ -13,6 +16,7 @@
 #include <vector>
 
 using namespace std::string_view_literals;
+using namespace std::string_literals;
 using namespace Catch::Matchers;
 
 
@@ -237,6 +241,28 @@ SCENARIO("DLT constructor", "[dlt]") {
           REQUIRE(payload == expected);
         }
       }
+    }
+  }
+}
+
+SCENARIO("DLT format") {
+  std::filesystem::path const DATA_PATH = DATA_DIR;
+
+  GIVEN("A DLT file of ") {
+    std::filesystem::path const path{DATA_PATH / "testfile_multiple_number_of_arguments.dlt"};
+    std::string const expected =
+      "|2011-05-10 12:14:36.453192000|0.0000|ECU\0|LOG\0|TES3|log     |info    ||\n"
+      "|2011-05-10 12:14:36.453192000|0.0000|ECU\0|LOG\0|TES3|log     |info    |21|\n"
+      "|2011-05-10 12:14:36.453192000|0.0000|ECU\0|LOG\0|TES3|log     |info    |31 32|\n"
+      "|2011-05-10 12:14:36.453192000|0.0000|ECU\0|LOG\0|TES3|log     |info    |41 42 43|\n"
+      "|2011-05-10 12:14:36.453192000|0.0000|ECU\0|LOG\0|TES3|log     |info    |51 52 53 54|\n"
+      "|2011-05-10 12:14:36.453192000|0.0000|ECU\0|LOG\0|TES3|log     |info    |61 62 63 64 65|\n"
+      "|2011-05-10 12:14:36.453192000|0.0000|ECU\0|LOG\0|TES3|log     |info    |71 72 73 74 75 76|\n"s;
+    WHEN("constuctor is called") {
+      DLT const dlt{path};
+      auto result = fmt::format("{}", dlt);
+
+      THEN("data is correct") { REQUIRE_THAT(result, Equals(expected)); }
     }
   }
 }

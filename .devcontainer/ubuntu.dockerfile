@@ -67,5 +67,9 @@ RUN bash -c "$(curl -fsSL https://raw.githubusercontent.com/ohmybash/oh-my-bash/
 # Install lazyvim
 RUN git clone https://github.com/LazyVim/starter ~/.config/nvim \
     && rm -rf ~/.config/nvim/.git
+COPY nvim /home/$USERNAME/.config/nvim
 RUN nvim --headless "+Lazy! sync" +qa
+
+# Create lazygit config file
+RUN mkdir -p /home/$USERNAME/.config/lazygit && touch /home/$USERNAME/.config/lazygit/config.yml
 
