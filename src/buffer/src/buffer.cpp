@@ -6,13 +6,21 @@
 
 Buffer::Buffer(size_t capacity) { m_buffer.reserve(capacity); }
 
-size_t Buffer::size() const { return m_buffer.size(); }
 
-size_t Buffer::capacity() const { return m_buffer.capacity(); }
+const char *Buffer::data_back() const {
+  return m_buffer.data() + m_buffer.size();// NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+}
+
 
 Buffer::iterator Buffer::begin() { return m_buffer.begin(); }
 
 Buffer::const_iterator Buffer::cbegin() const { return m_buffer.cbegin(); }
+
+
+size_t Buffer::size() const { return m_buffer.size(); }
+
+size_t Buffer::capacity() const { return m_buffer.capacity(); }
+
 
 Buffer::iterator Buffer::_iterator() {
   auto iter = m_buffer.begin();

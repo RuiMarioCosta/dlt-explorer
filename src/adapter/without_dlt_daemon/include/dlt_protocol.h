@@ -136,11 +136,13 @@
 #define DLT_CONTROL_RESPONSE 0x02U /**< Response to request message */
 #define DLT_CONTROL_TIME 0x03U /**< keep-alive message */
 
+/*
 #define DLT_MSIN_CONTROL_REQUEST \
   ((DLT_TYPE_CONTROL << DLT_MSIN_MSTP_SHIFT) | (DLT_CONTROL_REQUEST << DLT_MSIN_MTIN_SHIFT))
 #define DLT_MSIN_CONTROL_RESPONSE \
   ((DLT_TYPE_CONTROL << DLT_MSIN_MSTP_SHIFT) | (DLT_CONTROL_RESPONSE << DLT_MSIN_MTIN_SHIFT))
 #define DLT_MSIN_CONTROL_TIME ((DLT_TYPE_CONTROL << DLT_MSIN_MSTP_SHIFT) | (DLT_CONTROL_TIME << DLT_MSIN_MTIN_SHIFT))
+*/
 
 /*
  * Definitions of types of arguments in payload.
@@ -201,53 +203,53 @@ enum dlt_services {
   DLT_SERVICE_ID_LAST_ENTRY
 };
 
-enum dlt_user_services {
-  DLT_USER_SERVICE_ID = 0xF00,
-  DLT_SERVICE_ID_UNREGISTER_CONTEXT = 0xF01,
-  DLT_SERVICE_ID_CONNECTION_INFO = 0xF02,
-  DLT_SERVICE_ID_TIMEZONE = 0xF03,
-  DLT_SERVICE_ID_MARKER = 0xF04,
-  DLT_SERVICE_ID_OFFLINE_LOGSTORAGE = 0xF05,
-  DLT_SERVICE_ID_PASSIVE_NODE_CONNECT = 0xF06,
-  DLT_SERVICE_ID_PASSIVE_NODE_CONNECTION_STATUS = 0xF07,
-  DLT_SERVICE_ID_SET_ALL_LOG_LEVEL = 0xF08,
-  DLT_SERVICE_ID_SET_ALL_TRACE_STATUS = 0xF09,
-  DLT_SERVICE_ID_RESERVED_B = 0xF0B,
-  DLT_SERVICE_ID_RESERVED_C = 0xF0C,
-  DLT_SERVICE_ID_RESERVED_D = 0xF0D,
-  DLT_SERVICE_ID_RESERVED_E = 0xF0E,
-  DLT_USER_SERVICE_ID_LAST_ENTRY
-};
-
-/* Need to be adapted if another service is added */
-extern const char *const dlt_service_names[];
-extern const char *const dlt_user_service_names[];
-
-extern const char *dlt_get_service_name(unsigned int id);
-
-/*
- * Definitions of DLT service response status
- */
-#define DLT_SERVICE_RESPONSE_OK 0x00 /**< Control message response: OK */
-#define DLT_SERVICE_RESPONSE_NOT_SUPPORTED 0x01 /**< Control message response: Not supported */
-#define DLT_SERVICE_RESPONSE_ERROR 0x02 /**< Control message response: Error */
-#define DLT_SERVICE_RESPONSE_PERM_DENIED 0x03 /**< Control message response: Permission denied */
-#define DLT_SERVICE_RESPONSE_WARNING 0x04 /**< Control message response: warning */
-#define DLT_SERVICE_RESPONSE_LAST 0x05 /**< Used as max value */
-
-/*
- * Definitions of DLT service connection state
- */
-#define DLT_CONNECTION_STATUS_DISCONNECTED 0x01 /**< Client is disconnected */
-#define DLT_CONNECTION_STATUS_CONNECTED 0x02 /**< Client is connected */
-
-/*
- * Definitions of DLT GET_LOG_INFO status
- */
-#define GET_LOG_INFO_STATUS_MIN 3
-#define GET_LOG_INFO_STATUS_MAX 7
-#define GET_LOG_INFO_STATUS_NO_MATCHING_CTX 8
-#define GET_LOG_INFO_STATUS_RESP_DATA_OVERFLOW 9
+// enum dlt_user_services {
+//   DLT_USER_SERVICE_ID = 0xF00,
+//   DLT_SERVICE_ID_UNREGISTER_CONTEXT = 0xF01,
+//   DLT_SERVICE_ID_CONNECTION_INFO = 0xF02,
+//   DLT_SERVICE_ID_TIMEZONE = 0xF03,
+//   DLT_SERVICE_ID_MARKER = 0xF04,
+//   DLT_SERVICE_ID_OFFLINE_LOGSTORAGE = 0xF05,
+//   DLT_SERVICE_ID_PASSIVE_NODE_CONNECT = 0xF06,
+//   DLT_SERVICE_ID_PASSIVE_NODE_CONNECTION_STATUS = 0xF07,
+//   DLT_SERVICE_ID_SET_ALL_LOG_LEVEL = 0xF08,
+//   DLT_SERVICE_ID_SET_ALL_TRACE_STATUS = 0xF09,
+//   DLT_SERVICE_ID_RESERVED_B = 0xF0B,
+//   DLT_SERVICE_ID_RESERVED_C = 0xF0C,
+//   DLT_SERVICE_ID_RESERVED_D = 0xF0D,
+//   DLT_SERVICE_ID_RESERVED_E = 0xF0E,
+//   DLT_USER_SERVICE_ID_LAST_ENTRY
+// };
+//
+// /* Need to be adapted if another service is added */
+// extern const char *const dlt_service_names[];
+// extern const char *const dlt_user_service_names[];
+//
+// extern const char *dlt_get_service_name(unsigned int id);
+//
+// /*
+//  * Definitions of DLT service response status
+//  */
+// #define DLT_SERVICE_RESPONSE_OK 0x00 /**< Control message response: OK */
+// #define DLT_SERVICE_RESPONSE_NOT_SUPPORTED 0x01 /**< Control message response: Not supported */
+// #define DLT_SERVICE_RESPONSE_ERROR 0x02 /**< Control message response: Error */
+// #define DLT_SERVICE_RESPONSE_PERM_DENIED 0x03 /**< Control message response: Permission denied */
+// #define DLT_SERVICE_RESPONSE_WARNING 0x04 /**< Control message response: warning */
+// #define DLT_SERVICE_RESPONSE_LAST 0x05 /**< Used as max value */
+//
+// /*
+//  * Definitions of DLT service connection state
+//  */
+// #define DLT_CONNECTION_STATUS_DISCONNECTED 0x01 /**< Client is disconnected */
+// #define DLT_CONNECTION_STATUS_CONNECTED 0x02 /**< Client is connected */
+//
+// /*
+//  * Definitions of DLT GET_LOG_INFO status
+//  */
+// #define GET_LOG_INFO_STATUS_MIN 3
+// #define GET_LOG_INFO_STATUS_MAX 7
+// #define GET_LOG_INFO_STATUS_NO_MATCHING_CTX 8
+// #define GET_LOG_INFO_STATUS_RESP_DATA_OVERFLOW 9
 
 
 /**

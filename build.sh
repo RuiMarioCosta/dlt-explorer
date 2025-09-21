@@ -5,6 +5,9 @@
 set -xeuo pipefail
 
 BUILD=out/build
+
+PRESET=unixlike-gcc-debug
+# PRESET=unixlike-clang-debug
 CONFIGURE_OPTIONS=""
 BUILD_OPTIONS="-- -v"
 TARGET=all
@@ -12,16 +15,8 @@ TARGET=all
 # rm -rf out/build
 # rm -f $BUILD/unixlike-clang-debug/CMakeCache.txt $BUILD/unixlike-gcc-debug/CMakeCache.txt
 
-cmake --preset=unixlike-clang-debug $CONFIGURE_OPTIONS
-echo "######### clang configure #########"
+echo "######### configure #########" && cmake --preset=$PRESET $CONFIGURE_OPTIONS
 
-cmake --build $BUILD/unixlike-clang-debug --target $TARGET $BUILD_OPTIONS
-echo "######### clang build #########"
+echo "######### build #########" && cmake --build $BUILD/$PRESET --target $TARGET $BUILD_OPTIONS
 
-cmake --preset=unixlike-gcc-debug $CONFIGURE_OPTIONS
-echo "######### gcc configure #########"
-
-cmake --build $BUILD/unixlike-gcc-debug --target $TARGET $BUILD_OPTIONS
-echo "######### gcc build #########"
-
-$BUILD/unixlike-gcc-debug/test/tests
+$BUILD/$PRESET/test/tests

@@ -54,34 +54,26 @@ public:
   BUFFER_EXPORT Buffer() = default;
   explicit BUFFER_EXPORT Buffer(size_t capacity);
 
-  [[nodiscard]] BUFFER_EXPORT size_t size() const;
-  [[nodiscard]] BUFFER_EXPORT size_t capacity() const;
+  [[nodiscard]] BUFFER_EXPORT const char *data_back() const;
+
   [[nodiscard]] BUFFER_EXPORT iterator begin();
   [[nodiscard]] BUFFER_EXPORT const_iterator cbegin() const;
 
+  [[nodiscard]] BUFFER_EXPORT size_t size() const;
+  [[nodiscard]] BUFFER_EXPORT size_t capacity() const;
+
   template<typename T>
-  iterator store(T &&args) {
+  size_t store(T &&args) {
+    const auto *data = data_back();
     fmt::format_to(std::back_inserter(m_buffer), "{}", std::forward<T>(args));
-    return _iterator();
+    return static_cast<size_t>(data_back() - data);
   }
 
-  // template<typename T>
-  //   requires(not std::ranges::range<T>)
-  // const_iterator store(T &&args) {
-  //   fmt::format_to(std::back_inserter(m_buffer), "{}", std::forward<T>(args));
-  //   return iter();
-  // }
-  //
-  // template<std::ranges::range T>
-  // const_iterator store(T &&args) {
-  //   fmt::format_to(std::back_inserter(m_buffer), "{}", fmt::join(std::forward<T>(args), " "));
-  //   return iter();
-  // }
-
-  iterator store(auto &&...args) {
+  size_t store(auto &&...args) {
+    const auto *data = data_back();
     std::array<std::string, sizeof...(args)> parts{fmt::format("{}", std::forward<decltype(args)>(args))...};
     fmt::format_to(std::back_inserter(m_buffer), "{}", fmt::join(parts, " "));
-    return _iterator();
+    return static_cast<size_t>(data_back() - data);
   }
 
 private:

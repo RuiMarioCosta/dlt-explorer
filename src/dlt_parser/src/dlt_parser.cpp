@@ -34,7 +34,6 @@
 #include <utility>
 // #include <sstream>
 // #include <string_view>
-#include <syslog.h>
 // #include <vector>
 
 
@@ -42,15 +41,15 @@ using namespace boost::interprocess;
 
 namespace {
 
-[[nodiscard]] bool _dlt_msg_is_nonverbose(uint32_t htyp, uint32_t msin) {
+[[nodiscard]] bool dlt_msg_is_nonverbose(uint32_t htyp, uint32_t msin) {
   return (!DLT_IS_HTYP_UEH(htyp) || (DLT_IS_HTYP_UEH(htyp) && !DLT_IS_MSIN_VERB(msin)));
 }
 
-bool _dlt_msg_is_control(uint32_t htyp, uint32_t msin) {
+bool dlt_msg_is_control(uint32_t htyp, uint32_t msin) {
   return DLT_IS_HTYP_UEH(htyp) && (DLT_GET_MSIN_MSTP(msin) == DLT_TYPE_CONTROL);
 }
 
-bool _dlt_msg_is_control_response(uint32_t htyp, uint32_t msin) {
+bool dlt_msg_is_control_response(uint32_t htyp, uint32_t msin) {
   return DLT_IS_HTYP_UEH(htyp) && (DLT_GET_MSIN_MSTP(msin) == DLT_TYPE_CONTROL)
          && (DLT_GET_MSIN_MTIN(msin) == DLT_CONTROL_RESPONSE);
 }
@@ -71,18 +70,16 @@ T dlt_msg_read_value(std::string_view &payload) {
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
-  fmt::println("Opening file: {}", m_path.c_str());
   file_mapping const m_file(m_path.c_str(), read_only);
   m_region = mapped_region(m_file, read_only);
   m_buffer = Buffer{2 * m_region.get_size()};// reserve double the size
   std::span<uint8_t> const dlt_span{static_cast<uint8_t *>(m_region.get_address()), m_region.get_size()};
 
-  auto buffer_iter = m_buffer.begin();
   auto iterator = dlt_span.begin();
   auto const end = dlt_span.cend();
 
   while (iterator < end) {
-    // The bit_cast from pointer to pointer are UB and the safe approach would be throw use
+    // The bit_cast from pointer to pointer are UB and the safe approach would be to use
     // std::bit_cast to convert to DltStorageHeader, instead of DltStorageHeader*, but that
     // would copy everything and be more costly. Tests should be created to cover this unsafe code.
 
@@ -138,6 +135,8 @@ DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
     uint8_t noar = 0;
     std::string_view apid;
     std::string_view ctid;
+    std::string_view _message_type;
+    std::string_view _log_info;
     if (DLT_IS_HTYP_UEH(htyp)) {
       auto *const extended_header = std::bit_cast<DltExtendedHeader *>(&*iterator);
       std::advance(iterator, sizeof(DltExtendedHeader));
@@ -145,11 +144,15 @@ DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
       noar = extended_header->noar;
       apid = std::string_view{extended_header->apid, DLT_ID_SIZE};// NOLINT
       ctid = std::string_view{extended_header->ctid, DLT_ID_SIZE};// NOLINT
+      _message_type = message_type[DLT_GET_MSIN_MSTP(msin)];// NOLINT
+      _log_info = log_info[DLT_GET_MSIN_MTIN(msin)];// NOLINT
     }
     m_msins.emplace_back(msin);
     m_noars.emplace_back(noar);
     m_apids.emplace_back(apid);
     m_ctids.emplace_back(ctid);
+    m_message_types.emplace_back(_message_type);
+    m_log_infos.emplace_back(_log_info);
 
     // Payload
     /* calculate complete size of headers */
@@ -162,34 +165,38 @@ DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
     int32_t const data_size = static_cast<int32_t>(DLT_BETOH_16(static_cast<uint32_t>(len)))
                               + static_cast<int32_t>(sizeof(DltStorageHeader)) - static_cast<int32_t>(header_size);
 
-    auto buffer_iter_begin = buffer_iter;// save current buffer iterator to later construct the string_view
+
+    // initialize variables to later construct the string_view
+    auto const *payload_start = m_buffer.data_back();
+    size_t payload_size{0};
+
     std::string_view payload{std::bit_cast<char *>(&*iterator), static_cast<size_t>(data_size)};
     std::advance(iterator, data_size);
     std::string_view service_name;
     std::string_view return_type_name;
-    if (_dlt_msg_is_nonverbose(htyp, msin)) {
+    if (dlt_msg_is_nonverbose(htyp, msin)) {
       // non-verbose mode the payload buffer can be:
       // | service id name | return type | payload |
 
       // determine service id name
       auto const id_tmp = dlt_msg_read_value<uint32_t>(payload);
       auto const id_value = DLT_ENDIAN_GET_32(htyp, id_tmp);
-      if (_dlt_msg_is_control(htyp, msin) && id_value < DLT_SERVICE_ID_LAST_ENTRY) {
+      if (dlt_msg_is_control(htyp, msin) && id_value < DLT_SERVICE_ID_LAST_ENTRY) {
         // Possible out of bounds if id > service_id_name.size()
         // The check is ignored in favor of  performance
         service_name = service_id_name[id_value];// NOLINT
       } else {
-        m_buffer.store(id_value);
+        payload_size += m_buffer.store(id_value);
       }
 
       // determine return type name
-      if (_dlt_msg_is_control_response(htyp, msin)) {
+      if (dlt_msg_is_control_response(htyp, msin)) {
         auto retval = dlt_msg_read_value<uint8_t>(payload);
         // Possible out of bounds if id > service_id_name.size()
         // The check is ignored in favor of  performance
         return_type_name = return_type[retval];// NOLINT
       }
-      buffer_iter = m_buffer.store(service_name, Hex(payload));
+      payload_size += m_buffer.store(service_name, Hex(payload));
 
     } else {
       /* At this point, it is ensured that a extended header is available */
@@ -197,7 +204,7 @@ DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
       // verbose mode the payload buffer can be:
       // | type info | payload | [ type_info | payload | ...]
       for (size_t _ = 0; _ < noar; ++_) {
-        if (_ > 0) { m_buffer.store(' '); }// add a space in between arguments
+        if (_ > 0) { payload_size += m_buffer.store(' '); }// add a space in between arguments
 
         auto type_info_tmp = dlt_msg_read_value<uint32_t>(payload);
         uint32_t const type_info = DLT_ENDIAN_GET_32(htyp, type_info_tmp);
@@ -206,64 +213,116 @@ DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
             && (((type_info & DLT_TYPE_INFO_SCOD) == DLT_SCOD_ASCII)
                 || ((type_info & DLT_TYPE_INFO_SCOD) == DLT_SCOD_UTF8))) {
 
-          dlt_msg_read_value<uint16_t>(payload);
-          buffer_iter = m_buffer.store(payload);
+          auto value = dlt_msg_read_value<uint16_t>(payload);
+          payload_size += m_buffer.store(payload.substr(0, value));
+          payload.remove_prefix(value);
 
         } else if ((type_info & DLT_TYPE_INFO_BOOL) != 0U) {
 
-          if ((type_info & DLT_TYPE_INFO_VARI) != 0U) { throw std::runtime_error("Not implemented yet"); }
+          if ((type_info & DLT_TYPE_INFO_VARI) != 0U) {
+            throw std::runtime_error("DLT_TYPE_INFO_VARI Not implemented yet");
+          }
 
           auto value = dlt_msg_read_value<bool>(payload);
-          buffer_iter = m_buffer.store(value ? "true" : "false");
-
+          payload_size += m_buffer.store(value ? "true" : "false");
         } else if (((type_info & DLT_TYPE_INFO_SINT) != 0U) || ((type_info & DLT_TYPE_INFO_UINT) != 0U)) {
 
-          if ((type_info & DLT_TYPE_INFO_VARI) != 0U) { throw std::runtime_error("Not implemented yet"); }
+          if ((type_info & DLT_TYPE_INFO_VARI) != 0U) {
+            throw std::runtime_error("DLT_TYPE_INFO_VARI Not implemented yet");
+          }
 
-          if ((type_info & DLT_TYPE_INFO_FIXP) != 0U) { throw std::runtime_error("Not implemented yet"); }
+          if ((type_info & DLT_TYPE_INFO_FIXP) != 0U) {
+            throw std::runtime_error("DLT_TYPE_INFO_FIXP Not implemented yet");
+            // auto value = dlt_msg_read_value<uint32_t>(payload);
+            //
+            // switch (type_info & DLT_TYPE_INFO_TYLE) {
+            // case DLT_TYLE_8BIT:
+            // case DLT_TYLE_16BIT:
+            // case DLT_TYLE_32BIT: {
+            //   *ptr += 4;
+            //   *datalength -= 4;
+            //   break;
+            // }
+            // case DLT_TYLE_64BIT: {
+            //   if ((*datalength) < 8) return DLT_RETURN_ERROR;
+            //
+            //   *ptr += 8;
+            //   *datalength -= 8;
+            //   break;
+            // }
+            // case DLT_TYLE_128BIT: {
+            //   if ((*datalength) < 16) return DLT_RETURN_ERROR;
+            //
+            //   *ptr += 16;
+            //   *datalength -= 16;
+            //   break;
+            // }
+            // default: {
+            //   return DLT_RETURN_ERROR;
+            // }
+            // }
+          }
 
           switch (type_info & DLT_TYPE_INFO_TYLE) {
           case DLT_TYLE_8BIT: {
-            auto value = dlt_msg_read_value<uint8_t>(payload);
-            buffer_iter = m_buffer.store(value);
+            if ((type_info & DLT_TYPE_INFO_SINT) != 0U) {
+              auto value = dlt_msg_read_value<int8_t>(payload);
+              payload_size += m_buffer.store(value);
+            } else {
+              auto value = dlt_msg_read_value<uint8_t>(payload);
+              payload_size += m_buffer.store(value);
+            }
             break;
           }
           case DLT_TYLE_16BIT: {
             if ((type_info & DLT_TYPE_INFO_SINT) != 0U) {
               auto value_tmp = static_cast<uint32_t>(dlt_msg_read_value<int16_t>(payload));
               auto value = static_cast<int16_t>(DLT_ENDIAN_GET_16(htyp, value_tmp));
-              buffer_iter = m_buffer.store(value);
+              payload_size += m_buffer.store(value);
             } else {
               auto value_tmp = static_cast<uint32_t>(dlt_msg_read_value<uint16_t>(payload));
-              buffer_iter = m_buffer.store(DLT_ENDIAN_GET_16(htyp, value_tmp));
+              payload_size += m_buffer.store(DLT_ENDIAN_GET_16(htyp, value_tmp));
             }
             break;
           }
           case DLT_TYLE_32BIT: {
-            auto value_tmp = dlt_msg_read_value<uint32_t>(payload);
-            buffer_iter = m_buffer.store(DLT_ENDIAN_GET_32(htyp, value_tmp));
+            if ((type_info & DLT_TYPE_INFO_SINT) != 0U) {
+              auto value_tmp = static_cast<uint32_t>(dlt_msg_read_value<int32_t>(payload));
+              auto value = static_cast<int32_t>(DLT_ENDIAN_GET_32(htyp, value_tmp));
+              payload_size += m_buffer.store(value);
+            } else {
+              auto value_tmp = dlt_msg_read_value<uint32_t>(payload);
+              payload_size += m_buffer.store(DLT_ENDIAN_GET_32(htyp, value_tmp));
+            }
             break;
           }
           case DLT_TYLE_64BIT: {
-            auto value_tmp = dlt_msg_read_value<uint64_t>(payload);
-            buffer_iter = m_buffer.store(DLT_ENDIAN_GET_64(htyp, value_tmp));
+            if ((type_info & DLT_TYPE_INFO_SINT) != 0U) {
+              auto value_tmp = static_cast<uint64_t>(dlt_msg_read_value<int64_t>(payload));
+              auto value = static_cast<int64_t>(DLT_ENDIAN_GET_64(htyp, value_tmp));
+              payload_size += m_buffer.store(value);
+            } else {
+              auto value_tmp = dlt_msg_read_value<uint64_t>(payload);
+              payload_size += m_buffer.store(DLT_ENDIAN_GET_64(htyp, value_tmp));
+            }
             break;
           }
           case DLT_TYLE_128BIT: {
-            throw std::runtime_error("Not implemented yet");
+            throw std::runtime_error("DLT_TYLE_128BIT Not implemented yet");
           }
           default: {
             throw std::runtime_error("Unknown type info in DLT message");
           }
           }
-
         } else if ((type_info & DLT_TYPE_INFO_FLOA) != 0U) {
-          if ((type_info & DLT_TYPE_INFO_VARI) != 0U) { throw std::runtime_error("Not implemented yet"); }
+          if ((type_info & DLT_TYPE_INFO_VARI) != 0U) {
+            throw std::runtime_error("DLT_TYPE_INFO_VARI Not implemented yet");
+          }
 
           switch (type_info & DLT_TYPE_INFO_TYLE) {
           case DLT_TYLE_8BIT: {
             auto value = dlt_msg_read_value<uint8_t>(payload);
-            buffer_iter = m_buffer.store(value);
+            payload_size += m_buffer.store(value);
             break;
           }
           case DLT_TYLE_16BIT: {
@@ -273,37 +332,38 @@ DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
             break;
           }
           case DLT_TYLE_32BIT: {
-            auto value = dlt_msg_read_value<float32_t>(payload);
+            auto value = dlt_msg_read_value<float>(payload);
             auto value_uint32 = std::bit_cast<uint32_t>(value);
             auto value_uint32_swap = DLT_ENDIAN_GET_32(htyp, value_uint32);
-            auto value_corrected = std::bit_cast<float32_t>(value_uint32_swap);
-            buffer_iter = m_buffer.store(value_corrected);
+            auto value_corrected = std::bit_cast<float>(value_uint32_swap);
+            payload_size += m_buffer.store(value_corrected);
             break;
           }
           case DLT_TYLE_64BIT: {
-            auto value = dlt_msg_read_value<float64_t>(payload);
+            auto value = dlt_msg_read_value<double>(payload);
             auto value_uint64 = std::bit_cast<uint64_t>(value);
             auto value_uint64_swap = DLT_ENDIAN_GET_64(htyp, value_uint64);
-            auto value_corrected = std::bit_cast<float64_t>(value_uint64_swap);
-            buffer_iter = m_buffer.store(value_corrected);
+            auto value_corrected = std::bit_cast<double>(value_uint64_swap);
+            payload_size += m_buffer.store(value_corrected);
             break;
           }
           case DLT_TYLE_128BIT: {
-            throw std::runtime_error("Not implemented yet");
+            throw std::runtime_error("DLT_TYLE_128BIT Not implemented yet");
           }
           default: {
             throw std::runtime_error("Unknown type info in DLT message");
           }
           }
         } else if ((type_info & DLT_TYPE_INFO_RAWD) != 0U) {
-          dlt_msg_read_value<uint16_t>(payload);
-          buffer_iter = m_buffer.store(Hex(payload));
+          auto value = dlt_msg_read_value<uint16_t>(payload);
+          payload_size += m_buffer.store(Hex(payload.substr(0, value)));
+          payload.remove_prefix(value);
         }
       }
     }
     m_service_id_names.emplace_back(service_name);
     m_return_types.emplace_back(return_type_name);
-    m_payloads.emplace_back(buffer_iter_begin, buffer_iter);
+    m_payloads.emplace_back(payload_start, payload_size);
 
     m_size++;
   }
@@ -321,10 +381,13 @@ DLT::DLT(std::filesystem::path path) : m_path{std::move(path)} {
   assert(m_noars.size() == m_size);
   assert(m_apids.size() == m_size);
   assert(m_ctids.size() == m_size);
+  assert(m_message_types.size() == m_size);
+  assert(m_log_infos.size() == m_size);
   assert(m_service_id_names.size() == m_size);
   assert(m_return_types.size() == m_size);
   assert(m_payloads.size() == m_size);
   assert(m_buffer.size() < m_buffer.capacity());
+  fmt::println("Finished DLT parsing");
 }
 
 std::span<std::string_view const> DLT::patterns() const {
@@ -357,6 +420,14 @@ std::span<std::string_view const> DLT::app_ids() const {
 
 std::span<std::string_view const> DLT::ctx_ids() const {
   return std::span<std::string_view const>{m_ctids.data(), m_size};
+}
+
+std::span<std::string_view const> DLT::message_types() const {
+  return std::span<std::string_view const>{m_message_types.data(), m_size};
+}
+
+std::span<std::string_view const> DLT::log_infos() const {
+  return std::span<std::string_view const>{m_log_infos.data(), m_size};
 }
 
 std::span<std::string_view const> DLT::service_id_names() const {

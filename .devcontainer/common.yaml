@@ -42,15 +42,6 @@ x-volumes: &volumes
   - type: bind
     source: /tmp/.X11-unix
     target: /tmp/.X11-unix
-  # - type: bind
-  #   source: ${HOME}/.config/nvim
-  #   target: /home/ubuntu/.config/nvim
-  # - type: bind
-  #   source: ${HOME}/.cache/nvim
-  #   target: /home/ubuntu/.cache/nvim
-  # - type: bind
-  #   source: ${HOME}/.local/share/nvim
-  #   target: /home/ubuntu/.local/share/nvim
   - type: bind
     source: ${HOME}/.local/state/nvim
     target: /home/ubuntu/.local/state/nvim

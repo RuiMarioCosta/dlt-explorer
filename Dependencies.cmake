@@ -25,7 +25,7 @@ function(dlt_explorer_setup_dependencies)
   # endif()
 
   if(NOT TARGET Catch2::Catch2WithMain)
-    cpmaddpackage("gh:catchorg/Catch2@3.8.1")
+    cpmaddpackage("gh:catchorg/Catch2@3.10.0")
   endif()
 
   if(NOT TARGET CLI11::CLI11)
