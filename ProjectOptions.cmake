@@ -153,6 +153,8 @@ macro(dlt_explorer_global_options)
   endif()
 
   if(dlt_explorer_ENABLE_DLT_DAEMON)
+    # This is needed because dlt-daemon's cmake build sets this to ON and causes
+    # issues for any dependency that was built before without it
     option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
   endif()
 endmacro()
