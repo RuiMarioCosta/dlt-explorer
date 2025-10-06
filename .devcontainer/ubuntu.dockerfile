@@ -6,29 +6,17 @@ FROM ${IMAGE}:${TAG}
 RUN apt update && export DEBIAN_FRONTEND=noninteractive && \
   apt upgrade -y && \
   apt install -y --no-install-recommends \
-    sudo  software-properties-common vim less openssl unzip \
+    sudo software-properties-common vim less openssl unzip \
     wget git curl gzip tar ninja-build openssh-client
 
 # Install gcc
-RUN apt install -y --no-install-recommends gcc g++ gdb
-
-# Install clang
-RUN apt install -y --no-install-recommends \
-  clang libclang-dev llvm-dev lld libclang-rt-dev \
-  clangd clang-tidy clang-format lldb
-
-# Install optional dependencies
-RUN apt install -y --no-install-recommends ccache cppcheck
+RUN apt install -y --no-install-recommends gcc g++
 
 # Install python
 RUN apt install -y --no-install-recommends python3 python3-pip pipx black
-RUN pipx install cmakelang
 
 # Install lazyvim and dependencies
 RUN apt install -y --no-install-recommends ripgrep fzf luarocks fd-find
-
-# Install cmake and utils
-RUN apt install -y --no-install-recommends cmake cmake-curses-gui
 
 # Install utils
 RUN apt install -y --no-install-recommends xsel
@@ -55,14 +43,17 @@ ARG USERNAME=ubuntu
 USER ubuntu
 ENV HOME=/home/$USERNAME
 ENV SHELL=/bin/bash
-ENV PATH="$PATH:/opt/nvim-linux-x86_64/bin/:$HOME/.local/bin:$HOME/.cargo/bin"
+ENV PATH="$PATH:/opt/nvim-linux-x86_64/bin/"
 WORKDIR $HOME/dlt-explorer
-
-# Install additional lazyvim dependencies
-RUN pipx install ast-grep-cli
 
 # Autocompletion for bash, git, etc (it is customizable)
 RUN bash -c "$(curl -fsSL https://raw.githubusercontent.com/ohmybash/oh-my-bash/master/tools/install.sh)"
+
+# Install rust and dependencies
+RUN curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh -s -- -y
+
+# # Install additional lazyvim dependencies
+# RUN pipx install ast-grep-cli
 
 # Install lazyvim
 RUN git clone https://github.com/LazyVim/starter ~/.config/nvim \
