@@ -1,0 +1,59 @@
+version: "3.9"
+
+x-setup: &setup
+  stdin_open: true
+  tty: true
+  # network_mode: host
+  environment: &environment
+    SSH_AUTH_SOCK: /ssh-agent
+    DISPLAY: ${DISPLAY}
+  privileged: true
+
+x-build: &build
+  context: ./
+  network: host
+  args:
+    - USER_UID
+    - USER_GID
+    - WORKDIR=/home/ubuntu/dlt-explorer
+
+x-volumes: &volumes
+  - type: bind
+    source: ../
+    target: /home/ubuntu/dlt-explorer
+  - type: bind
+    source: ${HOME}/.netrc
+    target: /home/ubuntu/.netrc
+    read_only: true
+  - type: bind
+    source: ${HOME}/.ssh
+    target: /home/ubuntu/.ssh
+    read_only: true
+  - type: bind
+    source: ${HOME}/.gitconfig
+    target: /home/ubuntu/.gitconfig
+    read_only: true
+  - type: bind
+    source: ${SSH_AUTH_SOCK:-/dev/null}
+    target: /ssh-agent
+  - type: bind
+    source: ${HOME}/.ccache
+    target: /home/ubuntu/.ccache
+  - type: bind
+    source: /tmp/.X11-unix
+    target: /tmp/.X11-unix
+  - type: bind
+    source: ${HOME}/.local/state/nvim
+    target: /home/ubuntu/.local/state/nvim
+  - type: bind
+    source: ${HOME}/.config/github-copilot
+    target: /home/ubuntu/.config/github-copilot
+
+services:
+  common:
+    build:
+      <<: *build
+    <<: *setup
+    environment:
+      <<: *environment
+    volumes: *volumes
