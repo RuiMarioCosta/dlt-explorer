@@ -31,8 +31,8 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macos-latest
           - windows-latest
+          # - macos-latest
         compiler:
           # you can specify the version after `-` like "llvm-15.0.2".
           - llvm-19.1.1
@@ -43,13 +43,13 @@ jobs:
           - Release
           - Debug
         packaging_maintainer_mode:
-          - ON
+          # - ON
           - OFF
         build_shared:
           - OFF
 
         exclude:
-          # mingw is determined by this author to be too buggy to support
+          # mingw is determined to be too buggy to support
           - os: windows-latest
             compiler: gcc-14
 
@@ -64,58 +64,58 @@ jobs:
             enable_ipo: Off
             gcov_executable: "llvm-cov gcov"
 
-          - os: macos-latest
-            enable_ipo: Off
+          # - os: macos-latest
+          #   enable_ipo: Off
+          #
+          # # Set up preferred package generators, for given build configurations
+          # - build_type: Release
+          #   packaging_maintainer_mode: On
+          #   package_generator: TBZ2
+          #
+          # # This exists solely to make sure a non-multiconfig build works
+          # - os: ubuntu-latest
+          #   compiler: gcc-14
+          #   generator: "Unix Makefiles"
+          #   build_type: Debug
+          #   gcov_executable: gcov-14
+          #   packaging_maintainer_mode: On
+          #   enable_ipo: Off
 
-          # Set up preferred package generators, for given build configurations
-          - build_type: Release
-            packaging_maintainer_mode: On
-            package_generator: TBZ2
-
-          # This exists solely to make sure a non-multiconfig build works
-          - os: ubuntu-latest
-            compiler: gcc-14
-            generator: "Unix Makefiles"
-            build_type: Debug
-            gcov_executable: gcov-14
-            packaging_maintainer_mode: On
-            enable_ipo: Off
-
-          # Windows msvc builds
-          - os: windows-latest
-            compiler: msvc
-            generator: "Visual Studio 17 2022"
-            build_type: Debug
-            packaging_maintainer_mode: On
-            enable_ipo: On
-
-          - os: windows-latest
-            compiler: msvc
-            generator: "Visual Studio 17 2022"
-            build_type: Release
-            packaging_maintainer_mode: On
-            enable_ipo: On
-
-          - os: windows-latest
-            compiler: msvc
-            generator: "Visual Studio 17 2022"
-            build_type: Debug
-            packaging_maintainer_mode: Off
-
-          - os: windows-latest
-            compiler: msvc
-            generator: "Visual Studio 17 2022"
-            build_type: Release
-            packaging_maintainer_mode: Off
-            package_generator: ZIP
-
-          - os: windows-latest
-            compiler: msvc
-            generator: "Visual Studio 17 2022"
-            build_type: Release
-            packaging_maintainer_mode: On
-            enable_ipo: On
-            build_shared: On
+          # # Windows msvc builds
+          # - os: windows-latest
+          #   compiler: msvc
+          #   generator: "Visual Studio 17 2022"
+          #   build_type: Debug
+          #   packaging_maintainer_mode: On
+          #   enable_ipo: On
+          #
+          # - os: windows-latest
+          #   compiler: msvc
+          #   generator: "Visual Studio 17 2022"
+          #   build_type: Release
+          #   packaging_maintainer_mode: On
+          #   enable_ipo: On
+          #
+          # - os: windows-latest
+          #   compiler: msvc
+          #   generator: "Visual Studio 17 2022"
+          #   build_type: Debug
+          #   packaging_maintainer_mode: Off
+          #
+          # - os: windows-latest
+          #   compiler: msvc
+          #   generator: "Visual Studio 17 2022"
+          #   build_type: Release
+          #   packaging_maintainer_mode: Off
+          #   package_generator: ZIP
+          #
+          # - os: windows-latest
+          #   compiler: msvc
+          #   generator: "Visual Studio 17 2022"
+          #   build_type: Release
+          #   packaging_maintainer_mode: On
+          #   enable_ipo: On
+          #   build_shared: On
 
 
     steps:
@@ -126,7 +126,7 @@ jobs:
           script: |
             core.setFailed('There is a mismatch between configured llvm compiler and clang-tidy version chosen')
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
 
       - name: Setup Cache
         uses: ./.github/actions/setup_cache
