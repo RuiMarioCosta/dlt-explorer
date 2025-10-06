@@ -16,7 +16,7 @@ RUN apt install -y --no-install-recommends gcc g++
 RUN apt install -y --no-install-recommends python3 python3-pip pipx black
 
 # Install lazyvim and dependencies
-RUN apt install -y --no-install-recommends ripgrep fzf luarocks fd-find
+RUN apt install -y --no-install-recommends ripgrep fzf luarocks fd-find npm
 
 # Install utils
 RUN apt install -y --no-install-recommends xsel
