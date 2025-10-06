@@ -51,9 +51,10 @@ RUN bash -c "$(curl -fsSL https://raw.githubusercontent.com/ohmybash/oh-my-bash/
 
 # Install rust and dependencies
 RUN curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh -s -- -y
+RUN $HOME/.cargo/bin/rustup component add rust-analyzer
 
-# # Install additional lazyvim dependencies
-# RUN pipx install ast-grep-cli
+# Install additional lazyvim dependencies
+RUN pipx install ast-grep-cli
 
 # Install lazyvim
 RUN git clone https://github.com/LazyVim/starter ~/.config/nvim \
