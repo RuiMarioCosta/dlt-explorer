@@ -1,9 +1,6 @@
 use anyhow::Result;
-use clap::Parser;
 
-mod cmd_line_parser;
-
-use cmd_line_parser::Cli;
+use dlt_explorer::{Cli, Parser};
 
 fn main() -> Result<()> {
     let args = Cli::parse();
@@ -13,6 +10,7 @@ fn main() -> Result<()> {
         println!("Entering Gui");
     } else {
         println!("Using terminal");
+        dlt_explorer::process_dlt(args);
     }
 
     Ok(())
