@@ -2,6 +2,7 @@
 name = "dlt-explorer"
 version = "0.1.0"
 edition = "2024"
+description = "App for visualizing and exploring DLT files"
 
 [dependencies]
 anyhow = "1.0.100"

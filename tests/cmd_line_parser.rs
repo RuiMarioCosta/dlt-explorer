@@ -4,7 +4,7 @@ use assert_cmd::prelude::*; // Add methods on commands
 use std::process::Command; // Run programs
 
 #[test]
-fn default_subcommand_is_gui() -> Result<(), Box<dyn std::error::Error>> {
+fn call_without_options_or_paths_succeeds() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("dlt-explorer")?;
     cmd.assert().success();
 
@@ -12,30 +12,60 @@ fn default_subcommand_is_gui() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn term_subcommand_with_no_path_fails() -> Result<(), Box<dyn std::error::Error>> {
+fn call_with_one_path_suceeds() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("dlt-explorer")?;
-    cmd.arg("term");
-    cmd.assert().failure();
-
-    Ok(())
-}
-
-#[test]
-fn term_subcommand_with_path_succeeds() -> Result<(), Box<dyn std::error::Error>> {
-    let mut cmd = Command::cargo_bin("dlt-explorer")?;
-    cmd.arg("term").arg("path/to/file");
+    cmd.arg("path/to/file");
     cmd.assert().success();
 
     Ok(())
 }
 
 #[test]
-fn term_subcommand_with_filter_succeeds() -> Result<(), Box<dyn std::error::Error>> {
+fn call_with_multiple_paths_suceeds() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("dlt-explorer")?;
-    cmd.arg("term")
-        .arg("path/to/file")
+    cmd.arg("path/to/file1")
+        .arg("path/to/file2")
+        .arg("path/to/file3");
+    cmd.assert().success();
+
+    Ok(())
+}
+
+#[test]
+fn check_existence_of_filter_option() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("dlt-explorer")?;
+    cmd.arg("-f").arg("path/to/filter");
+    cmd.assert().success();
+
+    Ok(())
+}
+
+#[test]
+fn check_existence_of_terminal_flag() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("dlt-explorer")?;
+    cmd.arg("-t");
+    cmd.assert().success();
+
+    Ok(())
+}
+
+#[test]
+fn check_existence_of_sort_flag() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("dlt-explorer")?;
+    cmd.arg("-s");
+    cmd.assert().success();
+
+    Ok(())
+}
+
+#[test]
+fn call_with_multiple_parameters() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("dlt-explorer")?;
+    cmd.arg("path/to/file1")
+        .arg("path/to/file2")
         .arg("-f")
-        .arg("path/to/filter");
+        .arg("path/to/filter")
+        .arg("-t");
     cmd.assert().success();
 
     Ok(())
