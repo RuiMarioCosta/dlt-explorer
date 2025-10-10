@@ -43,7 +43,7 @@ fn check_existence_of_filter_option() -> Result<(), Box<dyn std::error::Error>> 
 #[test]
 fn check_existence_of_terminal_flag() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("dlt-explorer")?;
-    cmd.arg("-t");
+    cmd.arg("-t").arg("path/to/file");
     cmd.assert().success();
 
     Ok(())
