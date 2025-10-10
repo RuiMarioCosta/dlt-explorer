@@ -1,5 +1,8 @@
 mod cmd_line_parser;
+mod dlt;
+
 use anyhow::{Result, anyhow};
+use dlt::Dlt;
 
 pub use cmd_line_parser::{Cli, Parser};
 
@@ -26,6 +29,10 @@ fn process_in_terminal(args: Cli) -> Result<()> {
         paths.sort();
     }
 
+    let dlt = Dlt::new(paths, args.filter);
+    println!("{:?}", dlt);
+    println!("{:?}", dlt.paths());
+    println!("{:?}", dlt.filter());
 
     Ok(())
 }
