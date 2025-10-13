@@ -212,6 +212,7 @@ dependencies = [
  "assert_cmd",
  "assert_fs",
  "clap",
+ "memchr",
  "predicates",
 ]
 

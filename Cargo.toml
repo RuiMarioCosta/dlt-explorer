@@ -7,6 +7,7 @@ description = "App for visualizing and exploring DLT files"
 [dependencies]
 anyhow = "1.0.100"
 clap = { version = "4.5.48", features = ["derive"] }
+memchr = "2.7.6"
 
 [dev-dependencies]
 assert_cmd = "2.0.17"
