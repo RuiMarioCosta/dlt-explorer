@@ -158,6 +158,8 @@ impl<'a> Dlt<'a> {
                 // TODO: is this calculation needed? id = DLT_ENDIAN_GET_32(msg->standardheader->htyp, id_tmp);
                 if dlt_msg_is_control(htyp, msin) {
                     service_id_name = SERVICE_ID_NAME[id as usize];
+                } else {
+                    write!(&mut payload, "{}", id)?;
                 }
 
                 if dlt_msg_is_control_response(htyp, msin) {
@@ -177,7 +179,11 @@ impl<'a> Dlt<'a> {
                 // verbose mode the payload buffer can be:
                 // | type info | payload | [ type_info | payload | ...]
 
-                for _ in 0..noar {
+                for n in 0..noar {
+                    if n > 0 {
+                        write!(&mut payload, " ")?;
+                    }
+
                     let type_info = message.read_u32::<NativeEndian>()?;
                     // uint32_t const type_info = DLT_ENDIAN_GET_32(htyp, type_info_tmp);
 
@@ -425,6 +431,139 @@ mod tests {
                 "1.1",
                 "1.2",
                 "48 65 6c 6c 6f 20 77 6f 72 6c 64 00"
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_dlt_multiple_number_of_arguments() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push(PathBuf::from(
+            "src/dlt/tests/testfile_multiple_number_of_arguments.dlt",
+        ));
+        let paths = vec![path];
+
+        let result = Dlt::from_files(paths, None).unwrap();
+
+        assert_eq!(result.apids(), vec!["LOG\0"; 7]);
+        assert_eq!(result.ctids(), vec!["TES3"; 7]);
+        assert_eq!(
+            result.payloads(),
+            vec![
+                "",
+                "21",
+                "31 32",
+                "41 42 43",
+                "51 52 53 54",
+                "61 62 63 64 65",
+                "71 72 73 74 75 76",
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_dlt_number_and_text() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push(PathBuf::from("src/dlt/tests/testfile_number_and_text.dlt"));
+        let paths = vec![path];
+
+        let result = Dlt::from_files(paths, None).unwrap();
+
+        assert_eq!(result.apids(), vec!["LOG\0"; 18]);
+        assert_eq!(result.ctids(), vec!["TES4"; 18]);
+        assert_eq!(
+            result.payloads(),
+            vec![
+                "0 Hello world\0",
+                "1 Hello world\0",
+                "2 Hello world\0",
+                "3 Hello world\0",
+                "4 Hello world\0",
+                "5 Hello world\0",
+                "6 Hello world\0",
+                "7 Hello world\0",
+                "8 Hello world\0",
+                "9 Hello world\0",
+                "10 Hello world\0",
+                "11 Hello world\0",
+                "12 Hello world\0",
+                "13 Hello world\0",
+                "14 Hello world\0",
+                "15 Hello world\0",
+                "16 Hello world\0",
+                "17 Hello world\0",
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_dlt_type_id_and_text() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push(PathBuf::from("src/dlt/tests/testfile_type_id_and_text.dlt"));
+        let paths = vec![path];
+
+        let result = Dlt::from_files(paths, None).unwrap();
+
+        assert_eq!(
+            result.payloads(),
+            vec![
+                "set_default_log_level 04 72 65 6d 6f",
+                "set_default_trace_status 00 72 65 6d 6f",
+                "set_verbose_mode 01",
+                "set_timing_packets 00",
+                "101",
+                "102 f3 03",
+                "103 0a 00 48 65 6c 6c 6f 20 42 4d 57 00",
+                "201 65",
+                "202 66 00",
+                "203 67 00 00 00",
+                "204 68 00 00 00 00 00 00 00",
+                "205 69",
+                "206 6a 00",
+                "207 6b 00 00 00",
+                "208 6c 00 00 00 00 00 00 00",
+                "209 6d 00 00 00",
+                "210 6e 00 00 00",
+                "211 6f",
+                "212 13 00 53 54 52 49 4e 47 20 31 31 32 20 6d 65 73 73 61 67 65 00",
+                "213 14 00 43 53 54 52 49 4e 47 20 31 31 33 20 6d 65 73 73 61 67 65 00",
+                "214 cd cc 8c 3f",
+                "215 33 33 33 33 33 33 f3 3f",
+                "216 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "301",
+                "302 15 00 00 00",
+                "303 1f 00 00 00 20 00 00 00",
+                "304 29 00 00 00 2a 00 00 00 2b 00 00 00",
+                "305 33 00 00 00 34 00 00 00 35 00 00 00 36 00 00 00",
+                "305 3d 00 00 00 3e 00 00 00 3f 00 00 00 40 00 00 00 41 00 00 00",
+                "305 47 00 00 00 48 00 00 00 49 00 00 00 4a 00 00 00 4b 00 00 00 4c 00 00 00",
+                "401 00 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 01 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 02 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 03 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 04 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 05 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 06 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 07 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 08 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 09 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 0a 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 0b 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 0c 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 0d 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 0e 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 0f 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 10 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 11 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 12 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 13 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 14 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 15 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 16 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 17 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 18 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 19 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
+                "401 1a 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
             ]
         );
     }
