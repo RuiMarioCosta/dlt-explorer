@@ -182,7 +182,7 @@ impl<'a> Dlt<'a> {
                     // uint32_t const type_info = DLT_ENDIAN_GET_32(htyp, type_info_tmp);
 
                     if (type_info & DLT_TYPE_INFO_STRG != 0)
-                        && (type_info & DLT_TYPE_INFO_SCOD != DLT_SCOD_ASCII
+                        && (type_info & DLT_TYPE_INFO_SCOD == DLT_SCOD_ASCII
                             || type_info & DLT_TYPE_INFO_SCOD == DLT_SCOD_UTF8)
                     {
                         let length = message.read_u16::<NativeEndian>()?;
@@ -193,8 +193,109 @@ impl<'a> Dlt<'a> {
 
                         payload.reserve(length as usize);
                         write!(&mut payload, "{}", str::from_utf8(message)?)?;
+                    } else if type_info & DLT_TYPE_INFO_BOOL != 0 {
+                        if type_info & DLT_TYPE_INFO_VARI != 0 {
+                            panic!("DLT_TYPE_INFO_VARI not implemented");
+                        }
+
+                        let value: bool = message.read_u8()? != 0;
+                        write!(&mut payload, "{}", value)?;
+                    } else if (type_info & DLT_TYPE_INFO_SINT != 0)
+                        || (type_info & DLT_TYPE_INFO_UINT != 0)
+                    {
+                        if type_info & DLT_TYPE_INFO_VARI != 0 {
+                            panic!("DLT_TYPE_INFO_VARI not implemented");
+                        }
+                        if type_info & DLT_TYPE_INFO_FIXP != 0 {
+                            panic!("DLT_TYPE_INFO_FIXP not implemented");
+                        }
+
+                        match type_info & DLT_TYPE_INFO_TYLE {
+                            DLT_TYLE_8BIT => {
+                                if type_info & DLT_TYPE_INFO_SINT != 0 {
+                                    let value = message.read_i8()?;
+                                    write!(&mut payload, "{}", value)?;
+                                } else {
+                                    let value = message.read_u8()?;
+                                    write!(&mut payload, "{}", value)?;
+                                }
+                            }
+                            DLT_TYLE_16BIT => {
+                                if type_info & DLT_TYPE_INFO_SINT != 0 {
+                                    let value = message.read_i16::<NativeEndian>()?;
+                                    write!(&mut payload, "{}", value)?;
+                                } else {
+                                    let value = message.read_u16::<NativeEndian>()?;
+                                    write!(&mut payload, "{}", value)?;
+                                }
+                            }
+                            DLT_TYLE_32BIT => {
+                                if type_info & DLT_TYPE_INFO_SINT != 0 {
+                                    let value = message.read_i32::<NativeEndian>()?;
+                                    write!(&mut payload, "{}", value)?;
+                                } else {
+                                    let value = message.read_u32::<NativeEndian>()?;
+                                    write!(&mut payload, "{}", value)?;
+                                }
+                            }
+                            DLT_TYLE_64BIT => {
+                                if type_info & DLT_TYPE_INFO_SINT != 0 {
+                                    let value = message.read_i64::<NativeEndian>()?;
+                                    write!(&mut payload, "{}", value)?;
+                                } else {
+                                    let value = message.read_u64::<NativeEndian>()?;
+                                    write!(&mut payload, "{}", value)?;
+                                }
+                            }
+                            DLT_TYLE_128BIT => {
+                                if type_info & DLT_TYPE_INFO_SINT != 0 {
+                                    let value = message.read_i128::<NativeEndian>()?;
+                                    write!(&mut payload, "{}", value)?;
+                                } else {
+                                    let value = message.read_u128::<NativeEndian>()?;
+                                    write!(&mut payload, "{}", value)?;
+                                }
+                            }
+                            _ => panic!("Number size is  bigger than 128 bits"),
+                        }
+                    } else if type_info & DLT_TYPE_INFO_FLOA != 0 {
+                        if type_info & DLT_TYPE_INFO_VARI != 0 {
+                            panic!("DLT_TYPE_INFO_VARI not implemented");
+                        }
+
+                        match type_info & DLT_TYPE_INFO_TYLE {
+                            DLT_TYLE_8BIT => {
+                                panic!("No float conversion for 8 bit number");
+                            }
+                            DLT_TYLE_16BIT => {
+                                panic!("No float conversion for 16 bit number");
+                            }
+                            DLT_TYLE_32BIT => {
+                                let value = message.read_f32::<NativeEndian>()?;
+                                write!(&mut payload, "{}", value)?;
+                            }
+                            DLT_TYLE_64BIT => {
+                                let value = message.read_f64::<NativeEndian>()?;
+                                write!(&mut payload, "{}", value)?;
+                            }
+                            DLT_TYLE_128BIT => {
+                                panic!("No float conversion for 128 bit number");
+                            }
+                            _ => panic!("Number size is  bigger than 128 bits"),
+                        }
+                    } else if type_info & DLT_TYPE_INFO_RAWD != 0 {
+                        message.read_u16::<NativeEndian>()?;
+
+                        // reserve space for service id name, hex bytes and spaces to avoid reallocation
+                        payload.reserve(3 * message.len());
+
+                        let mut iter = message.iter();
+                        let byte = iter.next().unwrap();
+                        write!(&mut payload, "{:02x}", byte)?;
+                        for byte in iter {
+                            write!(&mut payload, " {:02x}", byte)?;
+                        }
                     }
-                    println!("noars: {noar}");
                 }
             }
             service_id_names.push(service_id_name);
@@ -267,8 +368,8 @@ mod tests {
 
         let result = Dlt::from_files(paths, None).unwrap();
 
-        assert_eq!(result.apids(), vec!["APP\0", "APP\0", "APP\0", "APP\0"]);
-        assert_eq!(result.ctids(), vec!["CON\0", "CON\0", "CON\0", "CON\0"]);
+        assert_eq!(result.apids(), vec!["APP\0"; 4]);
+        assert_eq!(result.ctids(), vec!["CON\0"; 4]);
         assert_eq!(
             result.payloads(),
             vec![
@@ -280,18 +381,51 @@ mod tests {
         );
     }
 
-    // #[test]
-    // fn parse_dlt_empty_number_and_text_messages() {
-    //     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    //     path.push(PathBuf::from(
-    //         "src/dlt/tests/testfile_empty_number_and_text.dlt",
-    //     ));
-    //     let paths = vec![path];
-    //
-    //     let result = Dlt::from_files(paths, None).unwrap();
-    //
-    //     assert_eq!(result.apids(), vec!["LOG\0", "LOG\0", "LOG\0"]);
-    //     assert_eq!(result.ctids(), vec!["TES1", "TES1", "TES1"]);
-    //     assert_eq!(result.payloads(), vec!["", "1011", "Hello BMW"]);
-    // }
+    #[test]
+    fn parse_dlt_empty_number_and_text_messages() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push(PathBuf::from(
+            "src/dlt/tests/testfile_empty_number_and_text.dlt",
+        ));
+        let paths = vec![path];
+
+        let result = Dlt::from_files(paths, None).unwrap();
+
+        assert_eq!(result.apids(), vec!["LOG\0"; 3]);
+        assert_eq!(result.ctids(), vec!["TES1"; 3]);
+        assert_eq!(result.payloads(), vec!["", "1011", "Hello BMW\0"]);
+    }
+
+    #[test]
+    fn parse_dlt_single_payloads() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push(PathBuf::from("src/dlt/tests/testfile_single_payloads.dlt"));
+        let paths = vec![path];
+
+        let result = Dlt::from_files(paths, None).unwrap();
+
+        assert_eq!(result.apids(), vec!["LOG\0"; 16]);
+        assert_eq!(result.ctids(), vec!["TES2"; 16]);
+        assert_eq!(
+            result.payloads(),
+            vec![
+                "101",
+                "102",
+                "103",
+                "104",
+                "105",
+                "106",
+                "107",
+                "108",
+                "109",
+                "110",
+                "true",
+                "STRING 112 message\0",
+                "CSTRING 113 message\0",
+                "1.1",
+                "1.2",
+                "48 65 6c 6c 6f 20 77 6f 72 6c 64 00"
+            ]
+        );
+    }
 }
