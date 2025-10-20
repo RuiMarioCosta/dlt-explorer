@@ -5,7 +5,7 @@ use memchr::memmem::Finder;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Seek};
 use std::path::PathBuf;
 
 mod dlt_common;
@@ -15,7 +15,7 @@ use dlt_common::*;
 use dlt_protocol::*;
 
 const DLT_DELIMITER: &[u8] = b"DLT\x01";
-const BUFFER_SIZE: usize = 1 << 13;
+const BUFFER_SIZE: usize = 1 << 13; // 8 KiB
 
 #[derive(Debug)]
 pub struct Dlt<'a> {
@@ -76,245 +76,260 @@ impl<'a> Dlt<'a> {
         // TODO: handle multiple paths
         let path = &paths[0];
         let file = File::open(path)?;
-        let mut reader = BufReader::new(file);
-        let _capacity = reader.capacity();
+        let mut reader = BufReader::with_capacity(BUFFER_SIZE, file);
         let mut buf = [0; BUFFER_SIZE];
-        let end = reader.read(&mut buf)?;
         let finder = Finder::new(DLT_DELIMITER);
-        let mut positions_iter = finder.find_iter(&buf).chain(std::iter::once(end));
+        // 64 elements so that the size is a multiple of the cache line
+        let mut positions: Vec<usize> = Vec::with_capacity(64);
 
-        let mut start_iter = positions_iter.next().unwrap();
-        for next_iter in positions_iter {
-            let mut message = &buf[start_iter + DLT_ID_SIZE..next_iter];
-
-            // let _debug = unsafe { str::from_utf8_unchecked(message) };
-
-            // Storage header
-            seconds.push(message.read_u32::<NativeEndian>()?);
-            microseconds.push(message.read_i32::<NativeEndian>()?);
-            let mut ecu = String::from_utf8_lossy(&message[..DLT_ID_SIZE]).to_string();
-            message = &message[DLT_ID_SIZE..];
-            // TODO: check storage header
-
-            // Standard header
-            let htyp = message.read_u8()?;
-            htyps.push(htyp);
-            mcnts.push(message.read_u8()?);
-            lens.push(message.read_u16::<NativeEndian>()?);
-
-            // Extra header
-            let mut seid: u32 = 0;
-            let mut tmsp: u32 = 0;
-            let extra_header_size = dlt_standard_header_extra_size(htyp);
-            if extra_header_size != 0 {
-                if dlt_is_htyp_weid(htyp) {
-                    ecu = String::from_utf8_lossy(&message[..DLT_ID_SIZE]).to_string();
-                    message = &message[DLT_ID_SIZE..];
-                }
-                if dlt_is_htyp_wsid(htyp) {
-                    seid = message.read_u32::<NativeEndian>()?;
-                }
-                if dlt_is_htyp_wtms(htyp) {
-                    tmsp = message.read_u32::<NativeEndian>()?;
-                }
+        let mut length: usize;
+        loop {
+            length = reader.read(&mut buf)?;
+            if length == 0 {
+                break;
             }
-            ecus.push(ecu);
-            seids.push(seid);
-            tmsps.push(tmsp);
 
-            // Extended header
-            let mut msin = 0;
-            let mut noar = 0;
-            let mut apid = String::new();
-            let mut ctid = String::new();
-            let mut message_type = "";
-            let mut log_info = "";
-            if dlt_is_htyp_ueh(htyp) {
-                msin = message.read_u8()?;
-                noar = message.read_u8()?;
-                apid = String::from_utf8_lossy(&message[..DLT_ID_SIZE]).to_string();
-                message = &message[DLT_ID_SIZE..];
-                ctid = String::from_utf8_lossy(&message[..DLT_ID_SIZE]).to_string();
-                message = &message[DLT_ID_SIZE..];
-                message_type = MESSAGE_TYPE[dlt_get_msin_mstp(msin) as usize];
-                log_info = LOG_INFO[dlt_get_msin_mtin(msin) as usize];
-            }
-            msins.push(msin);
-            noars.push(noar);
-            apids.push(apid);
-            ctids.push(ctid);
-            message_types.push(message_type);
-            log_infos.push(log_info);
-
-            // Payload
-            let mut service_id_name = "";
-            let mut return_type = "";
-            let mut payload = String::new();
-            if dlt_msg_is_nonverbose(htyp, msin) {
-                // non-verbose mode the payload buffer can be:
-                // | service id name | return type | payload |
-
-                let id = message.read_u32::<NativeEndian>()?;
-                // TODO: is this calculation needed? id = DLT_ENDIAN_GET_32(msg->standardheader->htyp, id_tmp);
-                if dlt_msg_is_control(htyp, msin) {
-                    service_id_name = SERVICE_ID_NAME[id as usize];
-                } else {
-                    write!(&mut payload, "{}", id)?;
-                }
-
-                if dlt_msg_is_control_response(htyp, msin) {
-                    let retval = message.read_u8()?;
-                    return_type = RETURN_TYPE[retval as usize];
-                }
-
-                // reserve space for service id name, hex bytes and spaces to avoid reallocation
-                payload.reserve(service_id_name.len() + 3 * message.len());
-                write!(&mut payload, "{}", service_id_name)?;
-                for byte in message.iter() {
-                    write!(&mut payload, " {:02x}", byte)?;
-                }
+            if length < BUFFER_SIZE {
+                positions = finder
+                    .find_iter(&buf[..length])
+                    .chain(std::iter::once(length))
+                    .collect();
             } else {
-                /* At this point, it is ensured that a extended header is available */
+                positions = finder.find_iter(&buf).collect();
+                let last = positions.last().unwrap();
+                reader.seek_relative(*last as i64 - BUFFER_SIZE as i64)?;
+            };
 
-                // verbose mode the payload buffer can be:
-                // | type info | payload | [ type_info | payload | ...]
+            for window in positions.windows(2) {
+                let begin = window[0];
+                let end = window[1];
+                let mut message = &buf[begin + DLT_ID_SIZE..end];
 
-                for n in 0..noar {
-                    if n > 0 {
-                        write!(&mut payload, " ")?;
+                // Storage header
+                seconds.push(message.read_u32::<NativeEndian>()?);
+                microseconds.push(message.read_i32::<NativeEndian>()?);
+                let mut ecu = String::from_utf8_lossy(&message[..DLT_ID_SIZE]).to_string();
+                message = &message[DLT_ID_SIZE..];
+                // TODO: check storage header
+
+                // Standard header
+                let htyp = message.read_u8()?;
+                htyps.push(htyp);
+                mcnts.push(message.read_u8()?);
+                lens.push(message.read_u16::<NativeEndian>()?);
+
+                // Extra header
+                let mut seid: u32 = 0;
+                let mut tmsp: u32 = 0;
+                let extra_header_size = dlt_standard_header_extra_size(htyp);
+                if extra_header_size != 0 {
+                    if dlt_is_htyp_weid(htyp) {
+                        ecu = String::from_utf8_lossy(&message[..DLT_ID_SIZE]).to_string();
+                        message = &message[DLT_ID_SIZE..];
+                    }
+                    if dlt_is_htyp_wsid(htyp) {
+                        seid = message.read_u32::<NativeEndian>()?;
+                    }
+                    if dlt_is_htyp_wtms(htyp) {
+                        tmsp = message.read_u32::<NativeEndian>()?;
+                    }
+                }
+                ecus.push(ecu);
+                seids.push(seid);
+                tmsps.push(tmsp);
+
+                // Extended header
+                let mut msin = 0;
+                let mut noar = 0;
+                let mut apid = String::new();
+                let mut ctid = String::new();
+                let mut message_type = "";
+                let mut log_info = "";
+                if dlt_is_htyp_ueh(htyp) {
+                    msin = message.read_u8()?;
+                    noar = message.read_u8()?;
+                    apid = String::from_utf8_lossy(&message[..DLT_ID_SIZE]).to_string();
+                    message = &message[DLT_ID_SIZE..];
+                    ctid = String::from_utf8_lossy(&message[..DLT_ID_SIZE]).to_string();
+                    message = &message[DLT_ID_SIZE..];
+                    message_type = MESSAGE_TYPE[dlt_get_msin_mstp(msin) as usize];
+                    log_info = LOG_INFO[dlt_get_msin_mtin(msin) as usize];
+                }
+                msins.push(msin);
+                noars.push(noar);
+                apids.push(apid);
+                ctids.push(ctid);
+                message_types.push(message_type);
+                log_infos.push(log_info);
+
+                // Payload
+                let mut service_id_name = "";
+                let mut return_type = "";
+                let mut payload = String::new();
+                if dlt_msg_is_nonverbose(htyp, msin) {
+                    // non-verbose mode the payload buffer can be:
+                    // | service id name | return type | payload |
+
+                    let id = message.read_u32::<NativeEndian>()?;
+                    // TODO: is this calculation needed? id = DLT_ENDIAN_GET_32(msg->standardheader->htyp, id_tmp);
+                    if dlt_msg_is_control(htyp, msin) {
+                        service_id_name = SERVICE_ID_NAME[id as usize];
+                    } else {
+                        write!(&mut payload, "{}", id)?;
                     }
 
-                    let type_info = message.read_u32::<NativeEndian>()?;
-                    // uint32_t const type_info = DLT_ENDIAN_GET_32(htyp, type_info_tmp);
+                    if dlt_msg_is_control_response(htyp, msin) {
+                        let retval = message.read_u8()?;
+                        return_type = RETURN_TYPE[retval as usize];
+                    }
 
-                    if (type_info & DLT_TYPE_INFO_STRG != 0)
-                        && (type_info & DLT_TYPE_INFO_SCOD == DLT_SCOD_ASCII
-                            || type_info & DLT_TYPE_INFO_SCOD == DLT_SCOD_UTF8)
-                    {
-                        let length = message.read_u16::<NativeEndian>()?;
+                    // reserve space for service id name, hex bytes and spaces to avoid reallocation
+                    payload.reserve(service_id_name.len() + 3 * message.len());
+                    write!(&mut payload, "{}", service_id_name)?;
+                    for byte in message.iter() {
+                        write!(&mut payload, " {:02x}", byte)?;
+                    }
+                } else {
+                    /* At this point, it is ensured that a extended header is available */
 
-                        if type_info & DLT_TYPE_INFO_VARI != 0 {
-                            panic!("DLT_TYPE_INFO_VARI not implemented");
+                    // verbose mode the payload buffer can be:
+                    // | type info | payload | [ type_info | payload | ...]
+
+                    for n in 0..noar {
+                        if n > 0 {
+                            write!(&mut payload, " ")?;
                         }
 
-                        payload.reserve(length as usize);
-                        write!(&mut payload, "{}", str::from_utf8(message)?)?;
-                    } else if type_info & DLT_TYPE_INFO_BOOL != 0 {
-                        if type_info & DLT_TYPE_INFO_VARI != 0 {
-                            panic!("DLT_TYPE_INFO_VARI not implemented");
-                        }
+                        let type_info = message.read_u32::<NativeEndian>()?;
+                        // uint32_t const type_info = DLT_ENDIAN_GET_32(htyp, type_info_tmp);
 
-                        let value: bool = message.read_u8()? != 0;
-                        write!(&mut payload, "{}", value)?;
-                    } else if (type_info & DLT_TYPE_INFO_SINT != 0)
-                        || (type_info & DLT_TYPE_INFO_UINT != 0)
-                    {
-                        if type_info & DLT_TYPE_INFO_VARI != 0 {
-                            panic!("DLT_TYPE_INFO_VARI not implemented");
-                        }
-                        if type_info & DLT_TYPE_INFO_FIXP != 0 {
-                            panic!("DLT_TYPE_INFO_FIXP not implemented");
-                        }
+                        if (type_info & DLT_TYPE_INFO_STRG != 0)
+                            && (type_info & DLT_TYPE_INFO_SCOD == DLT_SCOD_ASCII
+                                || type_info & DLT_TYPE_INFO_SCOD == DLT_SCOD_UTF8)
+                        {
+                            let length = message.read_u16::<NativeEndian>()?;
 
-                        match type_info & DLT_TYPE_INFO_TYLE {
-                            DLT_TYLE_8BIT => {
-                                if type_info & DLT_TYPE_INFO_SINT != 0 {
-                                    let value = message.read_i8()?;
-                                    write!(&mut payload, "{}", value)?;
-                                } else {
-                                    let value = message.read_u8()?;
+                            if type_info & DLT_TYPE_INFO_VARI != 0 {
+                                panic!("DLT_TYPE_INFO_VARI not implemented");
+                            }
+
+                            payload.reserve(length as usize);
+                            write!(&mut payload, "{}", str::from_utf8(message)?)?;
+                        } else if type_info & DLT_TYPE_INFO_BOOL != 0 {
+                            if type_info & DLT_TYPE_INFO_VARI != 0 {
+                                panic!("DLT_TYPE_INFO_VARI not implemented");
+                            }
+
+                            let value: bool = message.read_u8()? != 0;
+                            write!(&mut payload, "{}", value)?;
+                        } else if (type_info & DLT_TYPE_INFO_SINT != 0)
+                            || (type_info & DLT_TYPE_INFO_UINT != 0)
+                        {
+                            if type_info & DLT_TYPE_INFO_VARI != 0 {
+                                panic!("DLT_TYPE_INFO_VARI not implemented");
+                            }
+                            if type_info & DLT_TYPE_INFO_FIXP != 0 {
+                                panic!("DLT_TYPE_INFO_FIXP not implemented");
+                            }
+
+                            match type_info & DLT_TYPE_INFO_TYLE {
+                                DLT_TYLE_8BIT => {
+                                    if type_info & DLT_TYPE_INFO_SINT != 0 {
+                                        let value = message.read_i8()?;
+                                        write!(&mut payload, "{}", value)?;
+                                    } else {
+                                        let value = message.read_u8()?;
+                                        write!(&mut payload, "{}", value)?;
+                                    }
+                                }
+                                DLT_TYLE_16BIT => {
+                                    if type_info & DLT_TYPE_INFO_SINT != 0 {
+                                        let value = message.read_i16::<NativeEndian>()?;
+                                        write!(&mut payload, "{}", value)?;
+                                    } else {
+                                        let value = message.read_u16::<NativeEndian>()?;
+                                        write!(&mut payload, "{}", value)?;
+                                    }
+                                }
+                                DLT_TYLE_32BIT => {
+                                    if type_info & DLT_TYPE_INFO_SINT != 0 {
+                                        let value = message.read_i32::<NativeEndian>()?;
+                                        write!(&mut payload, "{}", value)?;
+                                    } else {
+                                        let value = message.read_u32::<NativeEndian>()?;
+                                        write!(&mut payload, "{}", value)?;
+                                    }
+                                }
+                                DLT_TYLE_64BIT => {
+                                    if type_info & DLT_TYPE_INFO_SINT != 0 {
+                                        let value = message.read_i64::<NativeEndian>()?;
+                                        write!(&mut payload, "{}", value)?;
+                                    } else {
+                                        let value = message.read_u64::<NativeEndian>()?;
+                                        write!(&mut payload, "{}", value)?;
+                                    }
+                                }
+                                DLT_TYLE_128BIT => {
+                                    if type_info & DLT_TYPE_INFO_SINT != 0 {
+                                        let value = message.read_i128::<NativeEndian>()?;
+                                        write!(&mut payload, "{}", value)?;
+                                    } else {
+                                        let value = message.read_u128::<NativeEndian>()?;
+                                        write!(&mut payload, "{}", value)?;
+                                    }
+                                }
+                                _ => panic!("Number size is  bigger than 128 bits"),
+                            }
+                        } else if type_info & DLT_TYPE_INFO_FLOA != 0 {
+                            if type_info & DLT_TYPE_INFO_VARI != 0 {
+                                panic!("DLT_TYPE_INFO_VARI not implemented");
+                            }
+
+                            match type_info & DLT_TYPE_INFO_TYLE {
+                                DLT_TYLE_8BIT => {
+                                    panic!("No float conversion for 8 bit number");
+                                }
+                                DLT_TYLE_16BIT => {
+                                    panic!("No float conversion for 16 bit number");
+                                }
+                                DLT_TYLE_32BIT => {
+                                    let value = message.read_f32::<NativeEndian>()?;
                                     write!(&mut payload, "{}", value)?;
                                 }
-                            }
-                            DLT_TYLE_16BIT => {
-                                if type_info & DLT_TYPE_INFO_SINT != 0 {
-                                    let value = message.read_i16::<NativeEndian>()?;
-                                    write!(&mut payload, "{}", value)?;
-                                } else {
-                                    let value = message.read_u16::<NativeEndian>()?;
+                                DLT_TYLE_64BIT => {
+                                    let value = message.read_f64::<NativeEndian>()?;
                                     write!(&mut payload, "{}", value)?;
                                 }
-                            }
-                            DLT_TYLE_32BIT => {
-                                if type_info & DLT_TYPE_INFO_SINT != 0 {
-                                    let value = message.read_i32::<NativeEndian>()?;
-                                    write!(&mut payload, "{}", value)?;
-                                } else {
-                                    let value = message.read_u32::<NativeEndian>()?;
-                                    write!(&mut payload, "{}", value)?;
+                                DLT_TYLE_128BIT => {
+                                    panic!("No float conversion for 128 bit number");
                                 }
+                                _ => panic!("Number size is  bigger than 128 bits"),
                             }
-                            DLT_TYLE_64BIT => {
-                                if type_info & DLT_TYPE_INFO_SINT != 0 {
-                                    let value = message.read_i64::<NativeEndian>()?;
-                                    write!(&mut payload, "{}", value)?;
-                                } else {
-                                    let value = message.read_u64::<NativeEndian>()?;
-                                    write!(&mut payload, "{}", value)?;
-                                }
-                            }
-                            DLT_TYLE_128BIT => {
-                                if type_info & DLT_TYPE_INFO_SINT != 0 {
-                                    let value = message.read_i128::<NativeEndian>()?;
-                                    write!(&mut payload, "{}", value)?;
-                                } else {
-                                    let value = message.read_u128::<NativeEndian>()?;
-                                    write!(&mut payload, "{}", value)?;
-                                }
-                            }
-                            _ => panic!("Number size is  bigger than 128 bits"),
-                        }
-                    } else if type_info & DLT_TYPE_INFO_FLOA != 0 {
-                        if type_info & DLT_TYPE_INFO_VARI != 0 {
-                            panic!("DLT_TYPE_INFO_VARI not implemented");
-                        }
+                        } else if type_info & DLT_TYPE_INFO_RAWD != 0 {
+                            message.read_u16::<NativeEndian>()?;
 
-                        match type_info & DLT_TYPE_INFO_TYLE {
-                            DLT_TYLE_8BIT => {
-                                panic!("No float conversion for 8 bit number");
-                            }
-                            DLT_TYLE_16BIT => {
-                                panic!("No float conversion for 16 bit number");
-                            }
-                            DLT_TYLE_32BIT => {
-                                let value = message.read_f32::<NativeEndian>()?;
-                                write!(&mut payload, "{}", value)?;
-                            }
-                            DLT_TYLE_64BIT => {
-                                let value = message.read_f64::<NativeEndian>()?;
-                                write!(&mut payload, "{}", value)?;
-                            }
-                            DLT_TYLE_128BIT => {
-                                panic!("No float conversion for 128 bit number");
-                            }
-                            _ => panic!("Number size is  bigger than 128 bits"),
-                        }
-                    } else if type_info & DLT_TYPE_INFO_RAWD != 0 {
-                        message.read_u16::<NativeEndian>()?;
+                            // reserve space for service id name, hex bytes and spaces to avoid reallocation
+                            payload.reserve(3 * message.len());
 
-                        // reserve space for service id name, hex bytes and spaces to avoid reallocation
-                        payload.reserve(3 * message.len());
-
-                        let mut iter = message.iter();
-                        let byte = iter.next().unwrap();
-                        write!(&mut payload, "{:02x}", byte)?;
-                        for byte in iter {
-                            write!(&mut payload, " {:02x}", byte)?;
+                            let mut iter = message.iter();
+                            let byte = iter.next().unwrap();
+                            write!(&mut payload, "{:02x}", byte)?;
+                            for byte in iter {
+                                write!(&mut payload, " {:02x}", byte)?;
+                            }
                         }
                     }
                 }
+                service_id_names.push(service_id_name);
+                return_types.push(return_type);
+                payloads.push(payload);
+
+                size += 1;
             }
-            service_id_names.push(service_id_name);
-            return_types.push(return_type);
-            payloads.push(payload);
-
-            size += 1;
-
-            start_iter = next_iter;
         }
 
         // TODO: add asserts of sizes
-        println!("Average message length: {} bytes", end / size);
+        println!("Average message length: {} bytes", size);
 
         Ok(Self {
             paths,
@@ -350,6 +365,10 @@ impl<'a> Dlt<'a> {
 
     pub fn payloads(&self) -> &[String] {
         &self.payloads
+    }
+
+    pub fn size(&self) -> usize {
+        self.size
     }
 }
 
@@ -566,5 +585,16 @@ mod tests {
                 "401 1a 00 00 00 0c 00 48 65 6c 6c 6f 20 77 6f 72 6c 64 00",
             ]
         );
+    }
+
+    #[test]
+    fn parse_dlt_with_size_bigger_than_buffer() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push(PathBuf::from("src/dlt/tests/testfile_100k_rows.dlt"));
+        let paths = vec![path];
+
+        let result = Dlt::from_files(paths, None).unwrap();
+
+        assert_eq!(result.size(), 100_000);
     }
 }

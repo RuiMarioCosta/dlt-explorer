@@ -72,13 +72,13 @@ pub const DLT_TYPE_INFO_BOOL: u32 = 0x00000010; // Boolean data
 pub const DLT_TYPE_INFO_SINT: u32 = 0x00000020; // Signed integer data
 pub const DLT_TYPE_INFO_UINT: u32 = 0x00000040; // Unsigned integer data
 pub const DLT_TYPE_INFO_FLOA: u32 = 0x00000080; // Float data
-pub const DLT_TYPE_INFO_ARAY: u32 = 0x00000100; // Array of standard types
+pub const _DLT_TYPE_INFO_ARAY: u32 = 0x00000100; // Array of standard types
 pub const DLT_TYPE_INFO_STRG: u32 = 0x00000200; // String
 pub const DLT_TYPE_INFO_RAWD: u32 = 0x00000400; // Raw data
 pub const DLT_TYPE_INFO_VARI: u32 = 0x00000800; // Set, if additional information to a variable is available
 pub const DLT_TYPE_INFO_FIXP: u32 = 0x00001000; // Set, if quantization and offset
-pub const DLT_TYPE_INFO_TRAI: u32 = 0x00002000; // Set, if additional trace information is added
-pub const DLT_TYPE_INFO_STRU: u32 = 0x00004000; // Struct
+pub const _DLT_TYPE_INFO_TRAI: u32 = 0x00002000; // Set, if additional trace information is added
+pub const _DLT_TYPE_INFO_STRU: u32 = 0x00004000; // Struct
 pub const DLT_TYPE_INFO_SCOD: u32 = 0x00038000; // coding of the type string: 0 = ASCII, 1 = UTF-8
 
 pub const DLT_TYLE_8BIT: u32 = 0x00000001;
@@ -89,5 +89,5 @@ pub const DLT_TYLE_128BIT: u32 = 0x00000005;
 
 pub const DLT_SCOD_ASCII: u32 = 0x00000000;
 pub const DLT_SCOD_UTF8: u32 = 0x00008000;
-pub const DLT_SCOD_HEX: u32 = 0x00010000;
-pub const DLT_SCOD_BIN: u32 = 0x00018000;
+pub const _DLT_SCOD_HEX: u32 = 0x00010000;
+pub const _DLT_SCOD_BIN: u32 = 0x00018000;
