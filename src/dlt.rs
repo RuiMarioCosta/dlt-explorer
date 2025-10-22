@@ -16,6 +16,13 @@ use dlt_protocol::*;
 
 const DLT_DELIMITER: &[u8] = b"DLT\x01";
 const BUFFER_SIZE: usize = 1 << 13; // 8 KiB
+const DLT_AVG_MESSAGE_SIZE: usize = 32; // rought estimate for average message sizes
+
+fn get_files_size(files: &[PathBuf]) -> u64 {
+    files
+        .iter()
+        .fold(0, |acc, file| acc + file.metadata().unwrap().len())
+}
 
 #[derive(Debug)]
 pub struct Dlt<'a> {
@@ -51,31 +58,32 @@ pub struct Dlt<'a> {
 
 impl<'a> Dlt<'a> {
     pub fn from_files(paths: Vec<PathBuf>, filter: Option<PathBuf>) -> Result<Self> {
-        // TODO: get file size from Metadata or MetadataExt and estimate how many row the file
-        // could have
+        let number_of_rows_estimate = get_files_size(&paths) as usize / DLT_AVG_MESSAGE_SIZE;
 
-        let mut seconds = Vec::new();
-        let mut microseconds = Vec::new();
-        let mut ecus = Vec::new();
-        let mut htyps = Vec::new();
-        let mut mcnts = Vec::new();
-        let mut lens = Vec::new();
-        let mut seids = Vec::new();
-        let mut tmsps = Vec::new();
-        let mut msins = Vec::new();
-        let mut noars = Vec::new();
-        let mut apids = Vec::new();
-        let mut ctids = Vec::new();
-        let mut message_types = Vec::new();
-        let mut log_infos = Vec::new();
-        let mut service_id_names = Vec::new();
-        let mut return_types = Vec::new();
-        let mut payloads = Vec::new();
+        let mut seconds = Vec::with_capacity(number_of_rows_estimate);
+        let mut microseconds = Vec::with_capacity(number_of_rows_estimate);
+        let mut ecus = Vec::with_capacity(number_of_rows_estimate);
+        let mut htyps = Vec::with_capacity(number_of_rows_estimate);
+        let mut mcnts = Vec::with_capacity(number_of_rows_estimate);
+        let mut lens = Vec::with_capacity(number_of_rows_estimate);
+        let mut seids = Vec::with_capacity(number_of_rows_estimate);
+        let mut tmsps = Vec::with_capacity(number_of_rows_estimate);
+        let mut msins = Vec::with_capacity(number_of_rows_estimate);
+        let mut noars = Vec::with_capacity(number_of_rows_estimate);
+        let mut apids = Vec::with_capacity(number_of_rows_estimate);
+        let mut ctids = Vec::with_capacity(number_of_rows_estimate);
+        let mut message_types = Vec::with_capacity(number_of_rows_estimate);
+        let mut log_infos = Vec::with_capacity(number_of_rows_estimate);
+        let mut service_id_names = Vec::with_capacity(number_of_rows_estimate);
+        let mut return_types = Vec::with_capacity(number_of_rows_estimate);
+        let mut payloads = Vec::with_capacity(number_of_rows_estimate);
         let mut size = 0;
 
         // TODO: handle multiple paths
         let path = &paths[0];
         let file = File::open(path)?;
+        let metada = file.metadata()?;
+        println!("Metadata: {:?}", metada);
         let mut reader = BufReader::with_capacity(BUFFER_SIZE, file);
         let mut buf = [0; BUFFER_SIZE];
         let finder = Finder::new(DLT_DELIMITER);
@@ -383,12 +391,10 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    const _TEST_FILE: &str = "src/dlt/tests/big_file.dlt";
-
     #[test]
     fn parse_dlt_control_messages() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push(PathBuf::from("src/dlt/tests/testfile_control_messages.dlt"));
+        path.push(PathBuf::from("tests/data/testfile_control_messages.dlt"));
         let paths = vec![path];
 
         let result = Dlt::from_files(paths, None).unwrap();
@@ -410,7 +416,7 @@ mod tests {
     fn parse_dlt_empty_number_and_text_messages() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push(PathBuf::from(
-            "src/dlt/tests/testfile_empty_number_and_text.dlt",
+            "tests/data/testfile_empty_number_and_text.dlt",
         ));
         let paths = vec![path];
 
@@ -424,7 +430,7 @@ mod tests {
     #[test]
     fn parse_dlt_single_payloads() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push(PathBuf::from("src/dlt/tests/testfile_single_payloads.dlt"));
+        path.push(PathBuf::from("tests/data/testfile_single_payloads.dlt"));
         let paths = vec![path];
 
         let result = Dlt::from_files(paths, None).unwrap();
@@ -458,7 +464,7 @@ mod tests {
     fn parse_dlt_multiple_number_of_arguments() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push(PathBuf::from(
-            "src/dlt/tests/testfile_multiple_number_of_arguments.dlt",
+            "tests/data/testfile_multiple_number_of_arguments.dlt",
         ));
         let paths = vec![path];
 
@@ -483,7 +489,7 @@ mod tests {
     #[test]
     fn parse_dlt_number_and_text() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push(PathBuf::from("src/dlt/tests/testfile_number_and_text.dlt"));
+        path.push(PathBuf::from("tests/data/testfile_number_and_text.dlt"));
         let paths = vec![path];
 
         let result = Dlt::from_files(paths, None).unwrap();
@@ -518,7 +524,7 @@ mod tests {
     #[test]
     fn parse_dlt_type_id_and_text() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push(PathBuf::from("src/dlt/tests/testfile_type_id_and_text.dlt"));
+        path.push(PathBuf::from("tests/data/testfile_type_id_and_text.dlt"));
         let paths = vec![path];
 
         let result = Dlt::from_files(paths, None).unwrap();
@@ -590,11 +596,46 @@ mod tests {
     #[test]
     fn parse_dlt_with_size_bigger_than_buffer() {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push(PathBuf::from("src/dlt/tests/testfile_100k_rows.dlt"));
+        path.push(PathBuf::from("tests/data/testfile_100k_rows.dlt"));
         let paths = vec![path];
 
         let result = Dlt::from_files(paths, None).unwrap();
 
         assert_eq!(result.size(), 100_000);
+    }
+
+    #[test]
+    fn parse_dlt_calculate_correct_size_of_one_file() {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push(PathBuf::from("tests/data/testfile_control_messages.dlt"));
+        let paths = vec![path];
+        let expected = 180;
+
+        let result = get_files_size(&paths);
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn parse_dlt_calculate_correct_size_of_multiple_files() {
+        let paths: Vec<PathBuf> = vec![
+            PathBuf::from(
+                env!("CARGO_MANIFEST_DIR").to_string()
+                    + "/tests/data/testfile_control_messages.dlt",
+            ),
+            PathBuf::from(
+                env!("CARGO_MANIFEST_DIR").to_string()
+                    + "/tests/data/testfile_single_payloads.dlt",
+            ),
+            PathBuf::from(
+                env!("CARGO_MANIFEST_DIR").to_string()
+                    + "/tests/data/testfile_empty_number_and_text.dlt",
+            ),
+        ];
+        let expected = 180 + 112 + 652;
+
+        let result = get_files_size(&paths);
+
+        assert_eq!(result, expected);
     }
 }

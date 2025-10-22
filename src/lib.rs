@@ -57,7 +57,10 @@ mod tests {
     #[test]
     fn process_dlt_with_one_path() {
         let args = Cli {
-            paths: Some(vec![PathBuf::from("path/to/file")]),
+            paths: Some(vec![PathBuf::from(
+                env!("CARGO_MANIFEST_DIR").to_string()
+                    + "/tests/data/testfile_control_messages.dlt",
+            )]),
             filter: None,
             terminal: true,
             sort: true,
