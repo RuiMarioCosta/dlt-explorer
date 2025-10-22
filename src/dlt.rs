@@ -5,7 +5,7 @@ use memchr::memmem::Finder;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::fs::File;
-use std::io::{BufReader, Read, Seek};
+use std::io::{BufReader, Read};
 use std::path::PathBuf;
 
 mod dlt_common;
@@ -87,8 +87,6 @@ impl<'a> Dlt<'a> {
         let mut reader = BufReader::with_capacity(BUFFER_SIZE, file);
         let mut buf = [0; BUFFER_SIZE];
         let finder = Finder::new(DLT_DELIMITER);
-        // 64 elements so that the size is a multiple of the cache line
-        let mut positions: Vec<usize> = Vec::with_capacity(64);
 
         let mut length: usize;
         loop {
@@ -97,15 +95,16 @@ impl<'a> Dlt<'a> {
                 break;
             }
 
-            if length < BUFFER_SIZE {
-                positions = finder
+            let positions = if length < BUFFER_SIZE {
+                finder
                     .find_iter(&buf[..length])
                     .chain(std::iter::once(length))
-                    .collect();
+                    .collect()
             } else {
-                positions = finder.find_iter(&buf).collect();
+                let positions: Vec<usize> = finder.find_iter(&buf).collect();
                 let last = positions.last().unwrap();
                 reader.seek_relative(*last as i64 - BUFFER_SIZE as i64)?;
+                positions
             };
 
             for window in positions.windows(2) {
@@ -624,8 +623,7 @@ mod tests {
                     + "/tests/data/testfile_control_messages.dlt",
             ),
             PathBuf::from(
-                env!("CARGO_MANIFEST_DIR").to_string()
-                    + "/tests/data/testfile_single_payloads.dlt",
+                env!("CARGO_MANIFEST_DIR").to_string() + "/tests/data/testfile_single_payloads.dlt",
             ),
             PathBuf::from(
                 env!("CARGO_MANIFEST_DIR").to_string()
