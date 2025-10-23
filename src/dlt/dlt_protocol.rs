@@ -5,7 +5,7 @@
  * Definitions of the htyp parameter in standard header.
  */
 pub const DLT_HTYP_UEH: u8 = 0x01; // use extended header
-pub const _DLT_HTYP_MSBF: u8 = 0x02; // MSB first
+pub const DLT_HTYP_MSBF: u8 = 0x02; // MSB first
 pub const DLT_HTYP_WEID: u8 = 0x04; // with ECU ID
 pub const DLT_HTYP_WSID: u8 = 0x08; // with session ID
 pub const DLT_HTYP_WTMS: u8 = 0x10; // with timestamp
@@ -91,3 +91,34 @@ pub const DLT_SCOD_ASCII: u32 = 0x00000000;
 pub const DLT_SCOD_UTF8: u32 = 0x00008000;
 pub const _DLT_SCOD_HEX: u32 = 0x00010000;
 pub const _DLT_SCOD_BIN: u32 = 0x00018000;
+
+/*
+ * Definitions of DLT services.
+ */
+// #define DLT_SERVICE_ID_CALLSW_CINJECTION 0xFFF
+//
+// enum dlt_services {
+//     DLT_SERVICE_ID = 0x00,
+//     DLT_SERVICE_ID_SET_LOG_LEVEL = 0x01,
+//     DLT_SERVICE_ID_SET_TRACE_STATUS = 0x02,
+//     DLT_SERVICE_ID_GET_LOG_INFO = 0x03,
+//     DLT_SERVICE_ID_GET_DEFAULT_LOG_LEVEL = 0x04,
+//     DLT_SERVICE_ID_STORE_CONFIG = 0x05,
+//     DLT_SERVICE_ID_RESET_TO_FACTORY_DEFAULT = 0x06,
+//     DLT_SERVICE_ID_SET_COM_INTERFACE_STATUS = 0x07,
+//     DLT_SERVICE_ID_SET_COM_INTERFACE_MAX_BANDWIDTH = 0x08,
+//     DLT_SERVICE_ID_SET_VERBOSE_MODE = 0x09,
+//     DLT_SERVICE_ID_SET_MESSAGE_FILTERING = 0x0A,
+//     DLT_SERVICE_ID_SET_TIMING_PACKETS = 0x0B,
+//     DLT_SERVICE_ID_GET_LOCAL_TIME = 0x0C,
+//     DLT_SERVICE_ID_USE_ECU_ID = 0x0D,
+//     DLT_SERVICE_ID_USE_SESSION_ID = 0x0E,
+//     DLT_SERVICE_ID_USE_TIMESTAMP = 0x0F,
+//     DLT_SERVICE_ID_USE_EXTENDED_HEADER = 0x10,
+//     DLT_SERVICE_ID_SET_DEFAULT_LOG_LEVEL = 0x11,
+//     DLT_SERVICE_ID_SET_DEFAULT_TRACE_STATUS = 0x12,
+//     DLT_SERVICE_ID_GET_SOFTWARE_VERSION = 0x13,
+//     DLT_SERVICE_ID_MESSAGE_BUFFER_OVERFLOW = 0x14,
+//     DLT_SERVICE_ID_LAST_ENTRY
+// };
+pub const DLT_SERVICE_ID_LAST_ENTRY: u8 = 0x15;
