@@ -225,14 +225,12 @@ impl<'a> Dlt<'a> {
                                 }
 
                                 payload.reserve(length as usize);
-                                payload = String::from_utf8_lossy(&message[..length as usize])
-                                    .to_string();
                                 // TODO: check if write! is faster
-                                // write!(
-                                //     &mut payload,
-                                //     "{}",
-                                //     str::from_utf8(&message[..length as usize])?
-                                // )?;
+                                write!(
+                                    &mut payload,
+                                    "{}",
+                                    String::from_utf8_lossy(&message[..length as usize])
+                                )?;
                                 message = &message[length as usize..];
                             } else if type_info & DLT_TYPE_INFO_BOOL != 0 {
                                 if type_info & DLT_TYPE_INFO_VARI != 0 {
