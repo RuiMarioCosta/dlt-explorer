@@ -9,30 +9,28 @@ use super::dlt_protocol::*;
 // #   define DLT_SWAP_64(value) ((((uint64_t)DLT_SWAP_32((value) & 0xffffffffull)) << 32) | (DLT_SWAP_32((value) >> 32)))
 //
 // #   define DLT_SWAP_16(value) ((((value) >> 8) & 0xff) | (((value) << 8) & 0xff00))
-// #   define DLT_SWAP_32(value) ((((value) >> 24) & 0xff) | (((value) << 8) & 0xff0000) | (((value) >> 8) & 0xff00) | \
-// (((value) << 24) & 0xff000000))
 
-fn dlt_swap_32(x: u32) -> u32 {
-    ((x >> 24) & 0xff) | ((x << 8) & 0xff0000) | ((x >> 8) & 0xff00) | ((x << 24) & 0xff000000)
-}
-
-fn dlt_betoh_32(x: u32) -> u32 {
-    dlt_swap_32(x)
-}
-
-fn dlt_letoh_32(x: u32) -> u32 {
-    x
-}
+// fn dlt_swap_32(x: u32) -> u32 {
+//     ((x >> 24) & 0xff) | ((x << 8) & 0xff0000) | ((x >> 8) & 0xff00) | ((x << 24) & 0xff000000)
+// }
+//
+// fn dlt_betoh_32(x: u32) -> u32 {
+//     dlt_swap_32(x)
+// }
+//
+// fn dlt_letoh_32(x: u32) -> u32 {
+//     x
+// }
 
 // #   define DLT_ENDIAN_GET_16(htyp, x) ((((htyp) & DLT_HTYP_MSBF) > 0) ? DLT_BETOH_16(x) : DLT_LETOH_16(x))
 // #   define DLT_ENDIAN_GET_32(htyp, x) ((((htyp) & DLT_HTYP_MSBF) > 0) ? DLT_BETOH_32(x) : DLT_LETOH_32(x))
-pub fn dlt_endian_get_32(htyp: u32, x: u32) -> u32 {
-    if (htyp & DLT_HTYP_MSBF as u32) > 0 {
-        dlt_betoh_32(x)
-    } else {
-        dlt_letoh_32(x)
-    }
-}
+// pub fn dlt_endian_get_32(htyp: u32, x: u32) -> u32 {
+//     if (htyp & DLT_HTYP_MSBF as u32) > 0 {
+//         dlt_betoh_32(x)
+//     } else {
+//         dlt_letoh_32(x)
+//     }
+// }
 
 // #   define DLT_ENDIAN_GET_64(htyp, x) ((((htyp) & DLT_HTYP_MSBF) > 0) ? DLT_BETOH_64(x) : DLT_LETOH_64(x))
 
