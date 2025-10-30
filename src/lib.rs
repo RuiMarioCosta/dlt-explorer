@@ -1,8 +1,10 @@
 mod cmd_line_parser;
 mod dlt;
+mod gui;
 
 use anyhow::{Result, anyhow};
 use dlt::Dlt;
+use gui::Counter;
 
 pub use cmd_line_parser::{Cli, Parser};
 
@@ -17,6 +19,8 @@ pub fn process_dlt(args: Cli) -> Result<()> {
 }
 
 fn process_in_gui(_args: Cli) -> Result<()> {
+    iced::run("Dlt Explorer", Counter::update, Counter::view)?;
+
     Ok(())
 }
 
