@@ -176,8 +176,8 @@ impl<'a> Dlt<'a> {
                         // | service id name | return type | payload |
 
                         let id = message.read_u32::<NativeEndian>()?;
-                        let _id_tmp = dlt_endian_get_32(htyp as u32, id);
-                        // TODO: is this calculation needed? id = DLT_ENDIAN_GET_32(msg->standardheader->htyp, id_tmp);
+                        // TODO: is this endian calculation needed?
+                        // let _id_tmp = dlt_endian_get_32(htyp as u32, id);
 
                         if dlt_msg_is_control(htyp, msin) {
                             if id < DLT_SERVICE_ID_LAST_ENTRY as u32 {
@@ -212,7 +212,8 @@ impl<'a> Dlt<'a> {
                             }
 
                             let type_info = message.read_u32::<NativeEndian>()?;
-                            let _type_info_tmp = dlt_endian_get_32(htyp as u32, type_info);
+                            // TODO: is this endian calculation needed?
+                            // let _type_info_tmp = dlt_endian_get_32(htyp as u32, type_info);
 
                             if (type_info & DLT_TYPE_INFO_STRG != 0)
                                 && (type_info & DLT_TYPE_INFO_SCOD == DLT_SCOD_ASCII
@@ -348,7 +349,6 @@ impl<'a> Dlt<'a> {
         }
 
         // TODO: add asserts of sizes
-        println!("Average message length: {} bytes", size);
 
         Ok(Self {
             paths,

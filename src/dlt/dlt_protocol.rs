@@ -5,7 +5,7 @@
  * Definitions of the htyp parameter in standard header.
  */
 pub const DLT_HTYP_UEH: u8 = 0x01; // use extended header
-pub const DLT_HTYP_MSBF: u8 = 0x02; // MSB first
+pub const _DLT_HTYP_MSBF: u8 = 0x02; // MSB first
 pub const DLT_HTYP_WEID: u8 = 0x04; // with ECU ID
 pub const DLT_HTYP_WSID: u8 = 0x08; // with session ID
 pub const DLT_HTYP_WTMS: u8 = 0x10; // with timestamp
