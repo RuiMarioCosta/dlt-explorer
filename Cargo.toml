@@ -11,6 +11,8 @@ byteorder = "1.5.0"
 clap = { version = "4.5.48", features = ["derive"] }
 itertools = "0.14.0"
 memchr = "2.7.6"
+iced_aw = "0.12.2"
+
 
 [dev-dependencies]
 assert_cmd = "2.0.17"
