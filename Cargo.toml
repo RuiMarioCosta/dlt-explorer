@@ -5,13 +5,14 @@ edition = "2024"
 description = "App for visualizing and exploring DLT files"
 
 [dependencies]
-iced = {version = "0.13.1", features = ["image"]}
 anyhow = "1.0.100"
 byteorder = "1.5.0"
 clap = { version = "4.5.48", features = ["derive"] }
 itertools = "0.14.0"
 memchr = "2.7.6"
+iced = {version = "0.13.1", features = ["image"]}
 iced_aw = "0.12.2"
+iced_native = "0.10.3"
 
 
 [dev-dependencies]

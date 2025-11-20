@@ -1,15 +1,17 @@
-use iced::alignment::Vertical;
+use iced::advanced::subscription;
+
 use iced::border::Radius;
 use iced::widget::{
-    Column, Container, Image, Row, Text, Tooltip, button, column, container, image, row, text,
-    text_input, tooltip,
+    Column, Container, Row, Space, button, container, image, text, text_input, tooltip,
 };
-use iced::{Alignment, Border, Color, Element, Length, Theme, theme};
+use iced::{Alignment, Border, Color, Element, Length, Subscription, window};
 
 use iced_aw::menu::Item;
 use iced_aw::style::{Status, menu_bar::primary};
 use iced_aw::widget::InnerBounds;
-use iced_aw::{ContextMenu, Menu, MenuBar, menu, menu_bar, menu_items, quad};
+use iced_aw::{Menu, menu, menu_bar, menu_items, quad};
+
+use iced_native::Event;
 
 use std::fmt::Display;
 
@@ -44,6 +46,15 @@ fn tooltiper<'a>(
     .into()
 }
 
+// fn text_box<'a>(content: &'a str) -> Element<'a, Message> {
+//     Container::new(text(content))
+//         .width(600)
+//         .height(Length::Fill)
+//         .padding(50)
+//         .style(|theme| container::bordered_box(theme))
+//         .into()
+// }
+
 #[derive(Clone, Debug, Default)]
 enum ToolBar {
     #[default]
@@ -60,20 +71,39 @@ enum ToolBar {
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    None,
     Expand,
+    LoadFile,
     Filter(String),
     Submitted,
+    WindowResized(u32, u32),
 }
 
 #[derive(Default)]
 pub struct DLT {
-    last_message: Option<Message>,
-    selected: ToolBar,
     text: String,
     buffer: String,
+    file_content: String,
+    width: u32,
+    height: u32,
 }
 
 impl DLT {
+    fn text_box<'a>(&self, content: &'a str) -> Element<'a, Message> {
+        let mut width: f32 = self.width as f32;
+        let mut height: f32 = self.height as f32;
+
+        width /= 2.0;
+        height -= 100.0;
+
+        Container::new(text(content))
+            .width(Length::Fixed(width))
+            .height(Length::Fixed(height))
+            .padding(50)
+            .style(|theme| container::bordered_box(theme))
+            .into()
+    }
+
     pub fn view(&self) -> Element<'_, Message> {
         let sub_menu = |items| Menu::new(items).width(180).offset(15.0).spacing(5.0);
 
@@ -82,7 +112,14 @@ impl DLT {
             (text(ToolBar::File.to_string()), sub_menu(menu_items!(
                 // (tooltiper(button("New").on_press(Message::Expand).width(Length::Fill), "Hello World"))
                 (text("New").align_y(Alignment::Start).width(Length::Fill))
-                (text("Open").align_y(Alignment::Start).width(Length::Fill))
+                // (text("Open").align_y(Alignment::Start).width(Length::Fill))
+                (button("Open").width(Length::Fill).on_press(Message::LoadFile).style(|theme: &iced::Theme, status: iced::widget::button::Status| {
+                    iced::widget::button::Style{
+                        background: None,
+                        text_color: Color::BLACK,
+                        ..Default::default()
+                    }
+                }))
                 (text("Save As").align_y(Alignment::Start).width(Length::Fill))
                 (separator())
                 (text("Clear").align_y(Alignment::Start).width(Length::Fill))
@@ -205,6 +242,9 @@ impl DLT {
             ).into(),
             ..primary(theme, status)
         });
+
+        let mut width: f32 = self.width as f32;
+        width /= 3.0;
 
         let icon_bar = Row::new()
             .spacing(10)
@@ -350,7 +390,8 @@ impl DLT {
             .push(
                 text_input("", &self.buffer)
                     .on_input(Message::Filter)
-                    .on_submit(Message::Submitted),
+                    .on_submit(Message::Submitted)
+                    .width(Length::Fixed(width)),
             )
             .push(tooltiper(
                 button(
@@ -371,11 +412,31 @@ impl DLT {
                 "Search for the next occurance",
             ));
 
-        Column::new().push(menubar).push(icon_bar).into()
+        Column::new()
+            .push(menubar)
+            .push(icon_bar)
+            .push(text(format!(
+                "Window Size: {} x {}",
+                self.width, self.height
+            )))
+            .push(
+                Row::new()
+                    .spacing(50)
+                    .push(Space::new(0.1, 0.0))
+                    .push(self.text_box(&self.file_content))
+                    .push(self.text_box(&self.file_content))
+                    .push(Space::new(0.1, 0.0)),
+            )
+            .into()
     }
 
     pub fn update(&mut self, message: Message) {
         match message {
+            Message::LoadFile => {
+                self.file_content = std::fs::read_to_string("/home/pfsf/Downloads/test_text.txt")
+                    .unwrap_or("Error loading file".to_string());
+                println!("File Loaded = {}", self.file_content);
+            }
             Message::Filter(content) => {
                 self.buffer = content;
             }
@@ -383,8 +444,17 @@ impl DLT {
                 self.text = self.buffer.clone();
                 println!("Final value = {}", self.text);
             }
+            Message::WindowResized(width, height) => {
+                self.width = width;
+                self.height = height;
+            }
             _ => {}
         }
+    }
+
+    pub fn subscription(&self) -> Subscription<Message> {
+        window::resize_events()
+            .map(|(_, size)| Message::WindowResized(size.width as u32, size.height as u32))
     }
 }
 

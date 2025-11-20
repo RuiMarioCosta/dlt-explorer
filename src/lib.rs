@@ -22,6 +22,7 @@ pub fn process_dlt(args: Cli) -> Result<()> {
 
 fn process_in_gui(_args: Cli) -> Result<()> {
     let _ = iced::application("DLT-Explorer", DLT::update, DLT::view)
+        .subscription(DLT::subscription)
         .window_size(Size::new(1500.0, 600.0))
         .position(iced::window::Position::Centered)
         .resizable(true)
