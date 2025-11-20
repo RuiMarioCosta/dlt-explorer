@@ -2,9 +2,11 @@ mod cmd_line_parser;
 mod dlt;
 mod gui;
 
+use iced::Size;
+
 use anyhow::{Result, anyhow};
 use dlt::Dlt;
-use gui::Counter;
+use gui::DLT;
 
 pub use cmd_line_parser::{Cli, Parser};
 
@@ -19,7 +21,11 @@ pub fn process_dlt(args: Cli) -> Result<()> {
 }
 
 fn process_in_gui(_args: Cli) -> Result<()> {
-    iced::run("A cool counter", Counter::update, Counter::view);
+    let _ = iced::application("DLT-Explorer", DLT::update, DLT::view)
+        .window_size(Size::new(1500.0, 600.0))
+        .position(iced::window::Position::Centered)
+        .resizable(true)
+        .run();
     Ok(())
 }
 

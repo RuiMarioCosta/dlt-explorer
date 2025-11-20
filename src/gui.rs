@@ -43,23 +43,6 @@ fn tooltiper<'a>(
     )
     .into()
 }
-// fn button_tooltip<'a>(
-//     button_text: &'a str,
-//     tooltip_text: &'a str,
-// ) -> Element<'a, Message, iced::Theme, iced::Renderer> {
-//     tooltip(
-//         button(button_text).on_press(Message::Expand),
-//         container(text(tooltip_text).color(Color::WHITE))
-//             .padding(10)
-//             .style(|theme| {
-//                 container::rounded_box(theme)
-//                     .border(Border::default().rounded(8.0))
-//                     .background(Color::from_rgb(0.2, 0.2, 0.2))
-//             }),
-//         tooltip::Position::Bottom,
-//     )
-//     .into()
-// }
 
 #[derive(Clone, Debug, Default)]
 enum ToolBar {
@@ -83,14 +66,14 @@ pub enum Message {
 }
 
 #[derive(Default)]
-pub struct Counter {
+pub struct DLT {
     last_message: Option<Message>,
     selected: ToolBar,
     text: String,
     buffer: String,
 }
 
-impl Counter {
+impl DLT {
     pub fn view(&self) -> Element<'_, Message> {
         let sub_menu = |items| Menu::new(items).width(180).offset(15.0).spacing(5.0);
 
