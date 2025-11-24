@@ -1,3 +1,13 @@
+use anyhow::{Result, anyhow};
+use iced::widget::Scrollable;
+use std::path::PathBuf;
+
+use crate::cmd_line_parser;
+use crate::dlt;
+
+use cmd_line_parser::Cli;
+use dlt::Dlt;
+
 use iced::advanced::subscription;
 
 use iced::border::Radius;
@@ -46,15 +56,6 @@ fn tooltiper<'a>(
     .into()
 }
 
-// fn text_box<'a>(content: &'a str) -> Element<'a, Message> {
-//     Container::new(text(content))
-//         .width(600)
-//         .height(Length::Fill)
-//         .padding(50)
-//         .style(|theme| container::bordered_box(theme))
-//         .into()
-// }
-
 #[derive(Clone, Debug, Default)]
 enum ToolBar {
     #[default]
@@ -79,28 +80,89 @@ pub enum Message {
     WindowResized(u32, u32),
 }
 
+struct Line {
+    index: u32,
+    time: u32,
+    timestamp: u32,
+    ecu_id: String,
+    app_id: String,
+    ctx_id: String,
+    type_: String,
+    payload: String,
+}
+
 #[derive(Default)]
-pub struct DLT {
+pub struct GUI {
     text: String,
     buffer: String,
     file_content: String,
     width: u32,
     height: u32,
+    list_of_dlts: Vec<Line>,
 }
 
-impl DLT {
+impl GUI {
     fn text_box<'a>(&self, content: &'a str) -> Element<'a, Message> {
         let mut width: f32 = self.width as f32;
         let mut height: f32 = self.height as f32;
 
-        width /= 2.0;
-        height -= 100.0;
+        // width /= 2.0;
+        // height -= 100.0;
+
+        width -= 100.0;
+        height /= 2.0;
 
         Container::new(text(content))
             .width(Length::Fixed(width))
             .height(Length::Fixed(height))
             .padding(50)
             .style(|theme| container::bordered_box(theme))
+            .into()
+    }
+
+    fn cell<'a>(&self, content: String, size: Length) -> Container<'static, Message> {
+        Container::new(text(content))
+            .padding(5)
+            .width(Length::Fixed(150.0))
+    }
+
+    fn table<'a>(&self) -> Element<'a, Message> {
+        let header = Row::new()
+            .push(self.cell("Index".to_string(), Length::Fixed(150.0)))
+            .push(self.cell("Time".to_string(), Length::Fixed(150.0)))
+            .push(self.cell("Timestamp".to_string(), Length::Fixed(150.0)))
+            .push(self.cell("Ecuid".to_string(), Length::Fixed(150.0)))
+            .push(self.cell("Apid".to_string(), Length::Fixed(150.0)))
+            .push(self.cell("Ctid".to_string(), Length::Fixed(150.0)))
+            .push(self.cell("Type".to_string(), Length::Fixed(150.0)))
+            .push(self.cell("Payload".to_string(), Length::Fill));
+
+        let mut items = Column::new().push(header);
+
+        if !self.list_of_dlts.is_empty() {
+            let list_of_rows = self.list_of_dlts.iter().map(|dlt| {
+                Row::new()
+                    .push(self.cell(dlt.index.to_string().clone(), Length::Fixed(150.0)))
+                    .push(self.cell(dlt.time.to_string().clone(), Length::Fixed(150.0)))
+                    .push(self.cell(dlt.timestamp.to_string().clone(), Length::Fixed(150.0)))
+                    .push(self.cell(dlt.ecu_id.clone(), Length::Fixed(150.0)))
+                    .push(self.cell(dlt.app_id.clone(), Length::Fixed(150.0)))
+                    .push(self.cell(dlt.ctx_id.clone(), Length::Fixed(150.0)))
+                    .push(self.cell(dlt.type_.clone(), Length::Fixed(150.0)))
+                    .push(self.cell(dlt.payload.clone(), Length::Fill))
+            });
+
+            for elem in list_of_rows {
+                items = items.push(elem);
+            }
+        }
+
+        let mut height: f32 = self.height as f32;
+        height /= 2.0;
+
+        Scrollable::new(items)
+            .height(Length::Fixed(height))
+            .width(Length::Fill)
             .into()
     }
 
@@ -423,10 +485,15 @@ impl DLT {
                 Row::new()
                     .spacing(50)
                     .push(Space::new(0.1, 0.0))
-                    .push(self.text_box(&self.file_content))
-                    .push(self.text_box(&self.file_content))
+                    // TODO: Need to add file manager
+                    .push(Space::new(0.1, 0.0))
+                    // INFO: DLT's
+                    .push(self.table())
                     .push(Space::new(0.1, 0.0)),
             )
+            .push(Space::new(0.0, 50.0))
+            // INFO: DLT Search
+            .push(self.text_box(&self.file_content))
             .into()
     }
 
@@ -436,6 +503,47 @@ impl DLT {
                 self.file_content = std::fs::read_to_string("/home/pfsf/Downloads/test_text.txt")
                     .unwrap_or("Error loading file".to_string());
                 println!("File Loaded = {}", self.file_content);
+
+                // INFO: fn process_in_terminal
+                let args = Cli {
+                    paths: Some(vec![PathBuf::from(
+                        env!("CARGO_MANIFEST_DIR").to_string()
+                            + "/tests/data/testfile_number_and_text.dlt",
+                    )]),
+                    filter: None,
+                    terminal: true,
+                    sort: true,
+                };
+
+                let Some(mut paths) = args.paths else {
+                    println!("ERROR IN PATH");
+                    return;
+                };
+
+                if args.sort {
+                    paths.sort();
+                }
+
+                let dlt = Dlt::from_files(paths, args.filter).unwrap();
+                // INFO: End of process_in_terminal
+
+                self.list_of_dlts = Vec::with_capacity(dlt.size());
+
+                for i in 0..dlt.size() {
+                    let item = Line {
+                        index: i as u32,
+                        time: 1,
+                        timestamp: 1,
+                        ecu_id: "Need to expose".to_string(),
+                        app_id: dlt.apids()[i].clone(),
+                        ctx_id: dlt.ctids()[i].clone(),
+                        type_: "Need to expose".to_string(),
+                        payload: dlt.payloads()[i].clone(),
+                    };
+
+                    self.list_of_dlts.push(item);
+                }
+                println!("Size list_of_dlts: {}", self.list_of_dlts.len());
             }
             Message::Filter(content) => {
                 self.buffer = content;

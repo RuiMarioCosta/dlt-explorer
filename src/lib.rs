@@ -6,7 +6,7 @@ use iced::Size;
 
 use anyhow::{Result, anyhow};
 use dlt::Dlt;
-use gui::DLT;
+use gui::GUI;
 
 pub use cmd_line_parser::{Cli, Parser};
 
@@ -21,8 +21,8 @@ pub fn process_dlt(args: Cli) -> Result<()> {
 }
 
 fn process_in_gui(_args: Cli) -> Result<()> {
-    let _ = iced::application("DLT-Explorer", DLT::update, DLT::view)
-        .subscription(DLT::subscription)
+    let _ = iced::application("DLT-Explorer", GUI::update, GUI::view)
+        .subscription(GUI::subscription)
         .window_size(Size::new(1500.0, 600.0))
         .position(iced::window::Position::Centered)
         .resizable(true)
