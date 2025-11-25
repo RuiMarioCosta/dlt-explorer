@@ -1,4 +1,3 @@
-use anyhow::{Result, anyhow};
 use iced::widget::Scrollable;
 use std::path::PathBuf;
 
@@ -7,8 +6,6 @@ use crate::dlt;
 
 use cmd_line_parser::Cli;
 use dlt::Dlt;
-
-use iced::advanced::subscription;
 
 use iced::border::Radius;
 use iced::widget::{
@@ -20,8 +17,6 @@ use iced_aw::menu::Item;
 use iced_aw::style::{Status, menu_bar::primary};
 use iced_aw::widget::InnerBounds;
 use iced_aw::{Menu, menu, menu_bar, menu_items, quad};
-
-use iced_native::Event;
 
 use std::fmt::Display;
 
@@ -80,29 +75,30 @@ pub enum Message {
     WindowResized(u32, u32),
 }
 
-struct Line {
-    index: u32,
-    time: u32,
-    timestamp: u32,
-    ecu_id: String,
-    app_id: String,
-    ctx_id: String,
-    type_: String,
-    payload: String,
-}
-
 #[derive(Default)]
-pub struct GUI {
+pub struct GUI<'a> {
     text: String,
     buffer: String,
     file_content: String,
     width: u32,
     height: u32,
-    list_of_dlts: Vec<Line>,
+    dlts: Dlt<'a>,
+    indexs: Vec<String>,
 }
 
-impl GUI {
-    fn text_box<'a>(&self, content: &'a str) -> Element<'a, Message> {
+enum Viewer {
+    Index,
+    Time,
+    Timestamp,
+    Ecuid,
+    Apid,
+    Ctid,
+    Type,
+    Payload,
+}
+
+impl<'a> GUI<'a> {
+    fn text_box(&self, content: &'a str) -> Element<'a, Message> {
         let mut width: f32 = self.width as f32;
         let mut height: f32 = self.height as f32;
 
@@ -120,42 +116,43 @@ impl GUI {
             .into()
     }
 
-    fn cell<'a>(&self, content: String, size: Length) -> Container<'static, Message> {
-        Container::new(text(content))
-            .padding(5)
-            .width(Length::Fixed(150.0))
+    fn cell(&self, content: &'a str, size: Length) -> Container<'a, Message> {
+        Container::new(text(content)).padding(5).width(size)
     }
 
-    fn table<'a>(&self) -> Element<'a, Message> {
+    fn table(&'a self) -> Element<'a, Message> {
+        println!("----------- 1");
         let header = Row::new()
-            .push(self.cell("Index".to_string(), Length::Fixed(150.0)))
-            .push(self.cell("Time".to_string(), Length::Fixed(150.0)))
-            .push(self.cell("Timestamp".to_string(), Length::Fixed(150.0)))
-            .push(self.cell("Ecuid".to_string(), Length::Fixed(150.0)))
-            .push(self.cell("Apid".to_string(), Length::Fixed(150.0)))
-            .push(self.cell("Ctid".to_string(), Length::Fixed(150.0)))
-            .push(self.cell("Type".to_string(), Length::Fixed(150.0)))
-            .push(self.cell("Payload".to_string(), Length::Fill));
+            .push(self.cell(Viewer::Index.as_str(), Length::Fixed(150.0)))
+            .push(self.cell(Viewer::Time.as_str(), Length::Fixed(150.0)))
+            .push(self.cell(Viewer::Timestamp.as_str(), Length::Fixed(150.0)))
+            .push(self.cell(Viewer::Ecuid.as_str(), Length::Fixed(150.0)))
+            .push(self.cell(Viewer::Apid.as_str(), Length::Fixed(150.0)))
+            .push(self.cell(Viewer::Ctid.as_str(), Length::Fixed(150.0)))
+            .push(self.cell(Viewer::Type.as_str(), Length::Fixed(150.0)))
+            .push(self.cell(Viewer::Payload.as_str(), Length::Fill));
 
+        println!("----------- 2");
         let mut items = Column::new().push(header);
+        println!("----------- 3");
 
-        if !self.list_of_dlts.is_empty() {
-            let list_of_rows = self.list_of_dlts.iter().map(|dlt| {
-                Row::new()
-                    .push(self.cell(dlt.index.to_string().clone(), Length::Fixed(150.0)))
-                    .push(self.cell(dlt.time.to_string().clone(), Length::Fixed(150.0)))
-                    .push(self.cell(dlt.timestamp.to_string().clone(), Length::Fixed(150.0)))
-                    .push(self.cell(dlt.ecu_id.clone(), Length::Fixed(150.0)))
-                    .push(self.cell(dlt.app_id.clone(), Length::Fixed(150.0)))
-                    .push(self.cell(dlt.ctx_id.clone(), Length::Fixed(150.0)))
-                    .push(self.cell(dlt.type_.clone(), Length::Fixed(150.0)))
-                    .push(self.cell(dlt.payload.clone(), Length::Fill))
-            });
+        if !self.dlts.size() > 0 {
+            println!("----------- 4");
+            for i in 0..self.dlts.size() {
+                let item = Row::new()
+                    .push(self.cell(&self.indexs[i], Length::Fixed(150.0)))
+                    .push(self.cell("1", Length::Fixed(150.0)))
+                    .push(self.cell("1", Length::Fixed(150.0)))
+                    .push(self.cell("TBA", Length::Fixed(150.0)))
+                    .push(self.cell(&self.dlts.apids()[i], Length::Fixed(150.0)))
+                    .push(self.cell(&self.dlts.ctids()[i], Length::Fixed(150.0)))
+                    .push(self.cell("TBA", Length::Fixed(150.0)))
+                    .push(self.cell(&self.dlts.payloads()[i], Length::Fill));
 
-            for elem in list_of_rows {
-                items = items.push(elem);
+                items = items.push(item);
             }
         }
+        println!("----------- 5");
 
         let mut height: f32 = self.height as f32;
         height /= 2.0;
@@ -508,7 +505,7 @@ impl GUI {
                 let args = Cli {
                     paths: Some(vec![PathBuf::from(
                         env!("CARGO_MANIFEST_DIR").to_string()
-                            + "/tests/data/testfile_number_and_text.dlt",
+                            + "/tests/data/testfile_100k_rows.dlt",
                     )]),
                     filter: None,
                     terminal: true,
@@ -524,26 +521,13 @@ impl GUI {
                     paths.sort();
                 }
 
-                let dlt = Dlt::from_files(paths, args.filter).unwrap();
+                self.dlts = Dlt::from_files(paths, args.filter).unwrap();
                 // INFO: End of process_in_terminal
 
-                self.list_of_dlts = Vec::with_capacity(dlt.size());
-
-                for i in 0..dlt.size() {
-                    let item = Line {
-                        index: i as u32,
-                        time: 1,
-                        timestamp: 1,
-                        ecu_id: "Need to expose".to_string(),
-                        app_id: dlt.apids()[i].clone(),
-                        ctx_id: dlt.ctids()[i].clone(),
-                        type_: "Need to expose".to_string(),
-                        payload: dlt.payloads()[i].clone(),
-                    };
-
-                    self.list_of_dlts.push(item);
-                }
-                println!("Size list_of_dlts: {}", self.list_of_dlts.len());
+                self.indexs = Vec::with_capacity(self.dlts.size());
+                self.indexs = (0..self.dlts.size() as u32)
+                    .map(|number| number.to_string())
+                    .collect();
             }
             Message::Filter(content) => {
                 self.buffer = content;
@@ -578,6 +562,21 @@ impl Display for ToolBar {
             ToolBar::Plugin => write!(f, "Plugin"),
             ToolBar::View => write!(f, "View"),
             ToolBar::Help => write!(f, "Help"),
+        }
+    }
+}
+
+impl Viewer {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Viewer::Index => "Index",
+            Viewer::Time => "Time",
+            Viewer::Timestamp => "Timestamp",
+            Viewer::Ecuid => "Ecuid",
+            Viewer::Apid => "Apid",
+            Viewer::Ctid => "Ctid",
+            Viewer::Type => "Type",
+            Viewer::Payload => "Payload",
         }
     }
 }
