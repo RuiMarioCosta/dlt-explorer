@@ -1,6 +1,10 @@
 mod cmd_line_parser;
 mod dlt;
 mod gui;
+mod iconbar;
+mod message;
+mod toolbar;
+mod viewer;
 
 use iced::Size;
 
