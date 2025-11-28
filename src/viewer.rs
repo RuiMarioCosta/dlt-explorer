@@ -29,13 +29,13 @@ pub fn table<'a>(entity: &'a GUI) -> Element<'a, Message> {
     let mut apids = column!(cell(Viewer::Apid.as_str(), Length::Fixed(150.0)));
     let mut ctids = column!(cell(Viewer::Ctid.as_str(), Length::Fixed(150.0)));
     let types = column!(cell(Viewer::Type.as_str(), Length::Fixed(150.0)));
-    let mut payloads = column!(cell(Viewer::Payload.as_str(), Length::Fixed(150.0)));
+    let mut payloads = column!(cell(Viewer::Payload.as_str(), Length::Fill));
 
     for i in 0..entity.dlts.size() {
         indexs = indexs.push(cell(&entity.indexs[i], Length::Fixed(150.0)));
         apids = apids.push(cell(&entity.dlts.apids()[i], Length::Fixed(150.0)));
-        ctids = ctids.push(cell(&entity.dlts.ctids()[i], Length::Fixed(150.0)));
-        payloads = payloads.push(cell(&entity.dlts.payloads()[i], Length::Fixed(150.0)));
+        // ctids = ctids.push(cell(&entity.dlts.ctids()[i], Length::Fixed(150.0)));
+        // payloads = payloads.push(cell(&entity.dlts.payloads()[i], Length::Fill));
     }
 
     let items = row!(
@@ -43,11 +43,12 @@ pub fn table<'a>(entity: &'a GUI) -> Element<'a, Message> {
     );
 
     let mut height: f32 = entity.height as f32;
-    height /= 2.0;
+    // height /= 2.0;
 
     Scrollable::new(items)
         .height(Length::Fixed(height))
         .width(Length::Fill)
+        .on_scroll(Message::Scrolled)
         .into()
 }
 

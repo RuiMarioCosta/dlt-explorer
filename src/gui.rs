@@ -10,21 +10,29 @@ use std::path::PathBuf;
 use cmd_line_parser::Cli;
 use dlt::Dlt;
 
-use iced::widget::{Column, Container, Row, Space, container, text};
+use iced::mouse::ScrollDelta;
+use iced::widget::{Column, Container, button, column, container, row, text};
 use iced::{Element, Length, Subscription, window};
 
 use message::Message;
 use viewer::table;
 
+use iced::widget::MouseArea;
+
 #[derive(Default)]
 pub struct GUI<'a> {
     pub text: String,
-    pub buffer: String,
+    pub filter_buffer: String,
     pub file_content: String,
     pub width: u32,
     pub height: u32,
     pub dlts: Dlt<'a>,
     pub indexs: Vec<String>,
+
+    pub location: f32,
+    pub rows_per_view: usize,
+
+    pub scroll: f32,
 }
 
 impl<'a> GUI<'a> {
@@ -47,40 +55,96 @@ impl<'a> GUI<'a> {
             .into()
     }
 
+    pub fn visible_range(&self) -> std::ops::Range<usize> {
+        let start = self.scroll as usize;
+
+        start..start + self.rows_per_view
+    }
+
     pub fn view(&self) -> Element<'_, Message> {
         let menubar = toolbar::get_toolbar();
         let iconbar = iconbar::get_iconbar(self);
 
-        Column::new()
-            .push(menubar)
-            .push(iconbar)
-            .push(text(format!(
-                "Window Size: {} x {}",
-                self.width, self.height
-            )))
-            .push(
-                Row::new()
-                    .spacing(50)
-                    .push(Space::new(0.1, 0.0))
-                    .push(Space::new(0.1, 0.0))
-                    .push(table(self))
-                    .push(Space::new(0.1, 0.0)),
-            )
-            .push(Space::new(0.0, 50.0))
-            // TODO: DLT Search
-            .push(self.text_box(&self.file_content))
-            .into()
+        column![
+            row![
+                button("100k").on_press(Message::Loadfile("/tests/data/testfile_100k_rows.dlt")),
+                button("number_and_text").on_press(Message::Loadfile(
+                    "/tests/data/testfile_number_and_text.dlt"
+                )),
+            ],
+            // table(self),
+            // Container::new(column(
+            //     self.dlts
+            //         .payloads()
+            //         .iter()
+            //         .map(|payload| text(payload).into())
+            // ))
+            if self.dlts.size() > 0 {
+                MouseArea::new(column(
+                    self.dlts.payloads()[self.visible_range()]
+                        .iter()
+                        .map(|payload| text(payload).into()),
+                ))
+                .on_scroll(|delta| {
+                    // println!("delta {:?}", delta);
+                    Message::Scroll(delta)
+                })
+            } else {
+                MouseArea::new(column![])
+            }
+        ]
+        .into()
     }
 
     pub fn update(&mut self, message: Message) {
+        self.rows_per_view = 17;
         match message {
+            Message::Loadfile(file) => {
+                let path = PathBuf::from(env!("CARGO_MANIFEST_DIR").to_string() + file);
+                println!("{:?}", path);
+                self.dlts = Dlt::from_files(vec![path], None).unwrap();
+
+                self.indexs = Vec::with_capacity(self.dlts.size());
+                self.indexs = (0..self.dlts.size() as u32)
+                    .map(|number| number.to_string())
+                    .collect();
+            }
+            Message::Scroll(delta) => {
+                let dy = match delta {
+                    // TODO: CHECK THIS. NOT SURE IF Y IS IN THE RIGHT PLACE
+                    ScrollDelta::Lines { y, .. } => y,
+                    ScrollDelta::Pixels { y, .. } => y,
+                };
+                println!("Dy {:?}", dy);
+
+                // Scroll down
+                if dy < 0.0 {
+                    self.scroll += 1.0;
+                }
+
+                // Scroll up
+                if dy > 0.0 {
+                    self.scroll -= 1.0;
+                }
+
+                self.scroll = self.scroll.ceil();
+                self.scroll = self.scroll.clamp(0.0, self.dlts.size() as f32);
+            }
+            Message::Scrolled(viewport) => {
+                let a = viewport.absolute_offset();
+                let b = viewport.absolute_offset_reversed();
+                let c = viewport.relative_offset();
+                let d = viewport.bounds();
+                let e = viewport.content_bounds();
+            }
             Message::LoadFile => {
                 // INFO: fn process_in_terminal
                 let args = Cli {
                     paths: Some(vec![PathBuf::from(
                         env!("CARGO_MANIFEST_DIR").to_string()
-                            // + "/tests/data/testfile_100k_rows.dlt",
-                        + "/tests/data/testfile_number_and_text.dlt",
+                            // + "/tests/data/testfile_type_id_and_text.dlt",
+                        + "/tests/data/testfile_100k_rows.dlt",
+                        // + "/tests/data/testfile_number_and_text.dlt",
                     )]),
                     filter: None,
                     terminal: true,
@@ -105,10 +169,10 @@ impl<'a> GUI<'a> {
                     .collect();
             }
             Message::Filter(content) => {
-                self.buffer = content;
+                self.filter_buffer = content;
             }
             Message::Submitted => {
-                self.text = self.buffer.clone();
+                self.text = self.filter_buffer.clone();
                 println!("Final value = {}", self.text);
             }
             Message::WindowResized(width, height) => {

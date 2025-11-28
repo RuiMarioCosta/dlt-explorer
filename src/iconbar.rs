@@ -170,7 +170,7 @@ pub fn get_iconbar(entity: &GUI) -> iced::widget::Row<'static, message::Message>
             "Use Regular Expressions when searching",
         ))
         .push(
-            text_input("", &entity.buffer)
+            text_input("", &entity.filter_buffer)
                 .on_input(Message::Filter)
                 .on_submit(Message::Submitted)
                 .width(Length::Fixed(width)),
