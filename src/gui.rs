@@ -66,32 +66,14 @@ impl<'a> GUI<'a> {
         let iconbar = iconbar::get_iconbar(self);
 
         column![
+            column![menubar, iconbar],
             row![
                 button("100k").on_press(Message::Loadfile("/tests/data/testfile_100k_rows.dlt")),
                 button("number_and_text").on_press(Message::Loadfile(
                     "/tests/data/testfile_number_and_text.dlt"
                 )),
             ],
-            // table(self),
-            // Container::new(column(
-            //     self.dlts
-            //         .payloads()
-            //         .iter()
-            //         .map(|payload| text(payload).into())
-            // ))
-            if self.dlts.size() > 0 {
-                MouseArea::new(column(
-                    self.dlts.payloads()[self.visible_range()]
-                        .iter()
-                        .map(|payload| text(payload).into()),
-                ))
-                .on_scroll(|delta| {
-                    // println!("delta {:?}", delta);
-                    Message::Scroll(delta)
-                })
-            } else {
-                MouseArea::new(column![])
-            }
+            table(self),
         ]
         .into()
     }
@@ -108,6 +90,9 @@ impl<'a> GUI<'a> {
                 self.indexs = (0..self.dlts.size() as u32)
                     .map(|number| number.to_string())
                     .collect();
+
+                // Scroll to the top
+                self.scroll = 0.0;
             }
             Message::Scroll(delta) => {
                 let dy = match delta {
@@ -115,7 +100,6 @@ impl<'a> GUI<'a> {
                     ScrollDelta::Lines { y, .. } => y,
                     ScrollDelta::Pixels { y, .. } => y,
                 };
-                println!("Dy {:?}", dy);
 
                 // Scroll down
                 if dy < 0.0 {
@@ -128,14 +112,14 @@ impl<'a> GUI<'a> {
                 }
 
                 self.scroll = self.scroll.ceil();
-                self.scroll = self.scroll.clamp(0.0, self.dlts.size() as f32);
-            }
-            Message::Scrolled(viewport) => {
-                let a = viewport.absolute_offset();
-                let b = viewport.absolute_offset_reversed();
-                let c = viewport.relative_offset();
-                let d = viewport.bounds();
-                let e = viewport.content_bounds();
+
+                if self.dlts.size() >= self.rows_per_view {
+                    self.scroll = self
+                        .scroll
+                        .clamp(0.0, (self.dlts.size() - self.rows_per_view) as f32);
+                } else if self.dlts.size() > 0 {
+                    self.scroll = self.scroll.clamp(0.0, self.rows_per_view as f32);
+                }
             }
             Message::LoadFile => {
                 // INFO: fn process_in_terminal

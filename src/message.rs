@@ -1,5 +1,4 @@
 use iced::mouse::ScrollDelta;
-use iced::widget::scrollable;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -10,8 +9,6 @@ pub enum Message {
     Filter(String),
     Submitted,
     WindowResized(u32, u32),
-    Scrolled(scrollable::Viewport),
 
-    ValueChanged(f32),
     Scroll(ScrollDelta),
 }
