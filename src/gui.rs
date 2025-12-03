@@ -11,25 +11,21 @@ use cmd_line_parser::Cli;
 use dlt::Dlt;
 
 use iced::mouse::ScrollDelta;
-use iced::widget::{Column, Container, button, column, container, row, text};
+use iced::widget::{Container, button, column, container, row, text};
 use iced::{Element, Length, Subscription, window};
 
 use message::Message;
 use viewer::table;
 
-use iced::widget::MouseArea;
-
 #[derive(Default)]
 pub struct GUI<'a> {
     pub text: String,
     pub filter_buffer: String,
-    pub file_content: String,
     pub width: u32,
     pub height: u32,
     pub dlts: Dlt<'a>,
     pub indexs: Vec<String>,
 
-    pub location: f32,
     pub rows_per_view: usize,
 
     pub scroll: f32,
@@ -40,9 +36,6 @@ impl<'a> GUI<'a> {
     fn text_box(&self, content: &'a str) -> Element<'a, Message> {
         let mut width: f32 = self.width as f32;
         let mut height: f32 = self.height as f32;
-
-        // width /= 2.0;
-        // height -= 100.0;
 
         width -= 100.0;
         height /= 2.0;
@@ -79,7 +72,7 @@ impl<'a> GUI<'a> {
     }
 
     pub fn update(&mut self, message: Message) {
-        self.rows_per_view = 17;
+        // self.rows_per_view = 17;
         match message {
             Message::Loadfile(file) => {
                 let path = PathBuf::from(env!("CARGO_MANIFEST_DIR").to_string() + file);
@@ -96,7 +89,6 @@ impl<'a> GUI<'a> {
             }
             Message::Scroll(delta) => {
                 let dy = match delta {
-                    // TODO: CHECK THIS. NOT SURE IF Y IS IN THE RIGHT PLACE
                     ScrollDelta::Lines { y, .. } => y,
                     ScrollDelta::Pixels { y, .. } => y,
                 };
@@ -120,6 +112,10 @@ impl<'a> GUI<'a> {
                 } else if self.dlts.size() > 0 {
                     self.scroll = self.scroll.clamp(0.0, self.rows_per_view as f32);
                 }
+
+                println!("height: {}", self.height);
+                println!("rows_per_view: {}", self.rows_per_view);
+                println!("{:?}", self.visible_range());
             }
             Message::LoadFile => {
                 // INFO: fn process_in_terminal
@@ -162,6 +158,9 @@ impl<'a> GUI<'a> {
             Message::WindowResized(width, height) => {
                 self.width = width;
                 self.height = height;
+
+                const ROWS_PER_PIXEL: f32 = 0.026315789;
+                self.rows_per_view = (self.height as f32 * (ROWS_PER_PIXEL)).ceil() as usize;
             }
             _ => {}
         }
