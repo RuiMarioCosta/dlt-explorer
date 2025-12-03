@@ -63,5 +63,10 @@ COPY nvim /home/$USERNAME/.config/nvim
 RUN nvim --headless "+Lazy! sync" +qa
 
 # Create lazygit config file
-RUN mkdir -p /home/$USERNAME/.config/lazygit && touch /home/$USERNAME/.config/lazygit/config.yml
+RUN mkdir -p /home/$USERNAME/.config/lazygit && touch /home/$USERNAME/.config/lazygit/config.yml;
+
+RUN sudo apt-get update
+
+RUN sudo apt-get install -y libx11-xcb1 libxcb1 libxcb-render0 libxcb-shape0 libxcb-xfixes0 libx11-dev libgl1 libgl1-mesa-dev libxrandr2 libxi6 libxcursor1 libxext6 libxdamage1 libxcomposite1 libxinerama1 libgtk-3-0 libxkbcommon-x11-0;
+RUN sudo rm -rf /var/lib/apt/lists/*;
 

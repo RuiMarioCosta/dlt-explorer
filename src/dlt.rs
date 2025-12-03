@@ -25,7 +25,7 @@ fn get_files_size(files: &[PathBuf]) -> u64 {
         .fold(0, |acc, file| acc + file.metadata().unwrap().len())
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct Dlt<'a> {
     paths: Vec<PathBuf>,
     filter: Option<PathBuf>,

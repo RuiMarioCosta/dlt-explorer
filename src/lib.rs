@@ -1,8 +1,16 @@
 mod cmd_line_parser;
 mod dlt;
+mod gui;
+mod iconbar;
+mod message;
+mod toolbar;
+mod viewer;
+
+use iced::Size;
 
 use anyhow::{Result, anyhow};
 use dlt::Dlt;
+use gui::GUI;
 
 pub use cmd_line_parser::{Cli, Parser};
 
@@ -17,6 +25,12 @@ pub fn process_dlt(args: Cli) -> Result<()> {
 }
 
 fn process_in_gui(_args: Cli) -> Result<()> {
+    let _ = iced::application("DLT-Explorer", GUI::update, GUI::view)
+        .subscription(GUI::subscription)
+        .window_size(Size::new(1500.0, 600.0))
+        .position(iced::window::Position::Centered)
+        .resizable(true)
+        .run();
     Ok(())
 }
 
