@@ -1,12 +1,10 @@
 use crate::GUI;
 use crate::message;
 
-use iced::widget::{Container, Scrollable, column, row, text};
+use iced::widget::{Container, MouseArea, column, row, text};
 use iced::{Element, Length};
 
 use message::Message;
-
-use iced::widget::MouseArea;
 
 enum Viewer {
     Index,
@@ -33,7 +31,6 @@ pub fn table<'a>(entity: &'a GUI) -> Element<'a, Message> {
     let types = column!(cell(Viewer::Type.as_str(), Length::Fixed(150.0)));
     let mut payloads = column!(cell(Viewer::Payload.as_str(), Length::Fill));
 
-    // for i in 0..entity.dlts.size() {
     if entity.dlts.size() > 0 {
         for i in entity.visible_range() {
             indexs = indexs.push(cell(&entity.indexs[i], Length::Fixed(150.0)));
@@ -47,9 +44,6 @@ pub fn table<'a>(entity: &'a GUI) -> Element<'a, Message> {
         indexs, times, timestamps, ecus, apids, ctids, types, payloads
     );
 
-    let mut height: f32 = entity.height as f32;
-    // height /= 2.0;
-
     if entity.dlts.size() > 0 {
         MouseArea::new(items)
             .on_scroll(|delta| Message::Scroll(delta))
@@ -57,12 +51,6 @@ pub fn table<'a>(entity: &'a GUI) -> Element<'a, Message> {
     } else {
         MouseArea::new(row![]).into()
     }
-
-    // Scrollable::new(items)
-    //     .height(Length::Fixed(height))
-    //     .width(Length::Fill)
-    //     .on_scroll(Message::Scrolled)
-    //     .into()
 }
 
 impl Viewer {

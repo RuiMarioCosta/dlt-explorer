@@ -17,6 +17,8 @@ use iced::{Element, Length, Subscription, window};
 use message::Message;
 use viewer::table;
 
+use iced::widget::vertical_slider;
+
 #[derive(Default)]
 pub struct GUI<'a> {
     pub text: String,
@@ -50,8 +52,9 @@ impl<'a> GUI<'a> {
 
     pub fn visible_range(&self) -> std::ops::Range<usize> {
         let start = self.scroll as usize;
+        let end = (start + self.rows_per_view).clamp(0, self.dlts.size());
 
-        start..start + self.rows_per_view
+        start..end
     }
 
     pub fn view(&self) -> Element<'_, Message> {
@@ -66,7 +69,14 @@ impl<'a> GUI<'a> {
                     "/tests/data/testfile_number_and_text.dlt"
                 )),
             ],
-            table(self),
+            row![
+                table(self),
+                vertical_slider(
+                    0.0..=self.dlts.size() as f32,
+                    self.scroll,
+                    Message::ScrollBar
+                ),
+            ]
         ]
         .into()
     }
@@ -110,12 +120,18 @@ impl<'a> GUI<'a> {
                         .scroll
                         .clamp(0.0, (self.dlts.size() - self.rows_per_view) as f32);
                 } else if self.dlts.size() > 0 {
-                    self.scroll = self.scroll.clamp(0.0, self.rows_per_view as f32);
+                    // FIXME: NOT SURE OF THIS
+                    self.scroll -= 1.0;
+                    self.scroll = self.scroll.clamp(0.0, self.dlts.size() as f32);
                 }
 
+                println!("Scroll: {}", self.scroll);
                 println!("height: {}", self.height);
                 println!("rows_per_view: {}", self.rows_per_view);
                 println!("{:?}", self.visible_range());
+            }
+            Message::ScrollBar(value) => {
+                self.scroll = value;
             }
             Message::LoadFile => {
                 // INFO: fn process_in_terminal
@@ -159,8 +175,7 @@ impl<'a> GUI<'a> {
                 self.width = width;
                 self.height = height;
 
-                const ROWS_PER_PIXEL: f32 = 0.026315789;
-                self.rows_per_view = (self.height as f32 * (ROWS_PER_PIXEL)).ceil() as usize;
+                self.rows_per_view = ((self.height - 2 * 40) as f32 / 40.0).floor() as usize;
             }
             _ => {}
         }

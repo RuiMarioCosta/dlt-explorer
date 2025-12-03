@@ -11,4 +11,5 @@ pub enum Message {
     WindowResized(u32, u32),
 
     Scroll(ScrollDelta),
+    ScrollBar(f32),
 }
