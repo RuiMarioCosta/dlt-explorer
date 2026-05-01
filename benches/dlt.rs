@@ -1,18 +1,19 @@
-use criterion::{Criterion, criterion_group, criterion_main};
-use std::hint::black_box;
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use dlt_explorer::dlt::Dlt;
+use std::path::PathBuf;
 
-// TODO: replace example code
-fn fibonacci(n: u64) -> u64 {
-    match n {
-        0 => 1,
-        1 => 1,
-        n => fibonacci(n - 1) + fibonacci(n - 2),
-    }
+fn bench_from_files(c: &mut Criterion) {
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests/data/testfile_100k_rows.dlt");
+    let file_size = path.metadata().expect("test file must exist").len();
+
+    let mut group = c.benchmark_group("dlt_parsing");
+    group.throughput(Throughput::Bytes(file_size));
+    group.bench_function(BenchmarkId::new("from_files", "100k_rows"), |b| {
+        b.iter(|| Dlt::from_files(vec![path.clone()], None).unwrap());
+    });
+    group.finish();
 }
 
-fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function("fib 20", |b| b.iter(|| fibonacci(black_box(20))));
-}
-
-criterion_group!(benches, criterion_benchmark);
+criterion_group!(benches, bench_from_files);
 criterion_main!(benches);
