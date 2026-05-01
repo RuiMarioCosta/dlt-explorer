@@ -1,5 +1,5 @@
 mod cmd_line_parser;
-pub(crate) mod dlt;
+pub mod dlt;
 mod gui;
 
 use anyhow::{Result, anyhow};
