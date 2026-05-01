@@ -374,12 +374,32 @@ impl<'a> Dlt<'a> {
         })
     }
 
+    pub fn seconds(&self) -> &[u32] {
+        &self.seconds
+    }
+
+    pub fn microseconds(&self) -> &[i32] {
+        &self.microseconds
+    }
+
+    pub fn ecus(&self) -> &[String] {
+        &self.ecus
+    }
+
     pub fn apids(&self) -> &[String] {
         &self.apids
     }
 
     pub fn ctids(&self) -> &[String] {
         &self.ctids
+    }
+
+    pub fn message_types(&self) -> &[&str] {
+        &self.message_types
+    }
+
+    pub fn log_infos(&self) -> &[&str] {
+        &self.log_infos
     }
 
     pub fn payloads(&self) -> &[String] {
