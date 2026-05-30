@@ -33,7 +33,7 @@ fn process_in_terminal(args: Cli) -> Result<()> {
         paths.sort();
     }
 
-    let dlt = Dlt::from_files(paths, args.filter);
+    let dlt = Dlt::open(paths)?;
     println!("{:?}", dlt);
 
     Ok(())
