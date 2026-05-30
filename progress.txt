@@ -1,0 +1,41 @@
+## Progress Log
+
+### 2026-05-30 — Issue #45: Tracer bullet: single v2 message parsed end-to-end
+
+**What was done:**
+- Implemented the v2 DLT parser tracer bullet (issue #45), establishing the new
+  architecture for AUTOSAR PRS v2 protocol parsing.
+
+**New module structure under `src/dlt/`:**
+- `mod.rs` — New v2 `Dlt` struct with `open()`, SoA columns (apid, ctid,
+  storage_timestamp_ns, payload_loc), mmap-backed lazy payloads
+- `protocol.rs` — HTYP2 bitfield constants and extraction helpers for v2
+- `intern.rs` — InternTable for deduplicating APID/CTID/ECU strings as u16 IDs
+- `framer.rs` — DLT\x01 storage header scanner, yields v2 frames from mmap data
+- `header.rs` — v2 base header + extension header parser (WACID: APID/CTID)
+- `payload.rs` — Stub for payload decoding (issue #48)
+- `error.rs` — Stub for ParseError types (issue #47)
+- `v1.rs` — Old v1 parser code preserved, all 10 tests marked `#[ignore]`
+
+**Dependencies added:**
+- `memmap2 = "0.9"` (zero-copy file access)
+- `tempfile = "3"` (dev-dependency for integration tests)
+
+**Test infrastructure:**
+- `V2MessageBuilder` — constructs spec-compliant v2 messages as `Vec<u8>`
+- Integration test: build message → write temp file → `Dlt::open()` → verify
+  APID, CTID, payload, row count
+- 24 tests pass, 10 v1 tests ignored, 0 failures
+
+**What's unblocked now:**
+- #46 — Complete header parsing and all extension header fields
+- #47 — Error-resilient framing: skip malformed messages and collect errors
+- #48 — Verbose, non-verbose, and control payload decoding
+
+**Notes for next person:**
+- The v2 storage header is 17 bytes (vs 16 for v1) due to 9-byte TMSP2 timestamp.
+- HTYP2 is 32-bit BE; byte 0 bits map to u32 bits 24-31. See protocol.rs for details.
+- Extension header fields are ordered by HTYP2 flag position. WACID covers both
+  APID and CTID (each length-prefixed). WSID is 4 bytes fixed (no length prefix).
+- The `Dlt::open()` currently silently skips v1 messages (returns 0 rows for v1 files).
+- GUI still uses v1 parser via `crate::dlt::v1::Dlt`.

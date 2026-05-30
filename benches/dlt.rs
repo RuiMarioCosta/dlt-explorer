@@ -1,5 +1,5 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use dlt_explorer::dlt::Dlt;
+use dlt_explorer::dlt::v1::Dlt;
 use std::path::PathBuf;
 
 fn bench_from_files(c: &mut Criterion) {

@@ -1,4 +1,4 @@
-use crate::dlt::Dlt;
+use crate::dlt::v1::Dlt;
 use iced::widget::{button, column, container, row, scrollable, text, Row};
 use iced::{Color, Element, Font, Length, Task};
 use std::sync::Arc;
