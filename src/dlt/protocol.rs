@@ -3,12 +3,13 @@
 /// DLT storage header delimiter
 pub const DLT_STORAGE_HEADER_PATTERN: &[u8] = b"DLT\x01";
 
-// Storage header sizes
+// Storage header sizes (matches DltStorageHeader in dlt-daemon)
 pub const STORAGE_HEADER_PATTERN_SIZE: usize = 4;
-pub const STORAGE_HEADER_TMSP2_SIZE: usize = 9; // seconds u32 LE + nanoseconds u32 LE + flags u8
+pub const STORAGE_HEADER_SECONDS_SIZE: usize = 4;
+pub const STORAGE_HEADER_MICROSECONDS_SIZE: usize = 4;
 pub const STORAGE_HEADER_ECU_SIZE: usize = 4;
 pub const STORAGE_HEADER_SIZE: usize =
-    STORAGE_HEADER_PATTERN_SIZE + STORAGE_HEADER_TMSP2_SIZE + STORAGE_HEADER_ECU_SIZE; // 17
+    STORAGE_HEADER_PATTERN_SIZE + STORAGE_HEADER_SECONDS_SIZE + STORAGE_HEADER_MICROSECONDS_SIZE + STORAGE_HEADER_ECU_SIZE; // 16
 
 /// Base header minimum size: HTYP2(4) + MCNT(1) + LEN(2) = 7
 pub const BASE_HEADER_MIN_SIZE: usize = 7;
@@ -183,7 +184,8 @@ pub fn build_htyp2_full(
     val
 }
 
-/// Encode a nanosecond timestamp into a 9-byte TMSP2 field (big-endian).
+/// Encode a nanosecond timestamp into a 9-byte base header TMSP2 field (big-endian).
+/// This is the in-message timestamp per AUTOSAR PRS, NOT the storage header timestamp.
 pub fn encode_tmsp2(total_ns: u64) -> [u8; 9] {
     let seconds = total_ns / 1_000_000_000;
     let nanoseconds = (total_ns % 1_000_000_000) as u32;
@@ -197,7 +199,8 @@ pub fn encode_tmsp2(total_ns: u64) -> [u8; 9] {
     buf
 }
 
-/// Decode a 9-byte TMSP2 field into a nanosecond timestamp.
+/// Decode a 9-byte base header TMSP2 field into a nanosecond timestamp.
+/// This is the in-message timestamp per AUTOSAR PRS, NOT the storage header timestamp.
 pub fn decode_tmsp2(tmsp2: &[u8; 9]) -> u64 {
     let nanoseconds = u32::from_be_bytes(tmsp2[0..4].try_into().unwrap()) & 0x7FFF_FFFF;
     let seconds = ((tmsp2[4] as u64) << 32)
@@ -205,7 +208,7 @@ pub fn decode_tmsp2(tmsp2: &[u8; 9]) -> u64 {
         | ((tmsp2[6] as u64) << 16)
         | ((tmsp2[7] as u64) << 8)
         | (tmsp2[8] as u64);
-    seconds * 1_000_000_000 + nanoseconds as u64
+    seconds.saturating_mul(1_000_000_000).saturating_add(nanoseconds as u64)
 }
 
 #[cfg(test)]
