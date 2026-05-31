@@ -15,6 +15,19 @@ pub const STORAGE_HEADER_SIZE: usize =
 pub const BASE_HEADER_MIN_SIZE: usize = 7;
 
 // ---------------------------------------------------------------------------
+// v1 HTYP bit definitions
+// ---------------------------------------------------------------------------
+
+/// MSBF bit in v1 HTYP — indicates big-endian payload byte order.
+pub const DLT_HTYP_MSBF: u8 = 0x02;
+
+/// Returns true if the v1 HTYP byte has the MSBF (most significant byte first) flag set.
+#[inline]
+pub fn htyp_has_msbf(htyp: u8) -> bool {
+    htyp & DLT_HTYP_MSBF != 0
+}
+
+// ---------------------------------------------------------------------------
 // HTYP2 bitfield layout
 //
 // HTYP2 is a 32-bit big-endian field.  Byte 0 (transmitted first) holds:
