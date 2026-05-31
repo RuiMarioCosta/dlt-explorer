@@ -27,7 +27,12 @@ pub struct Dlt {
     intern: InternTable,
     apid: Vec<u16>,
     ctid: Vec<u16>,
+    ecu: Vec<u16>,
+    session_id: Vec<u32>,
     storage_timestamp_ns: Vec<u64>,
+    message_timestamp_ns: Vec<u64>,
+    message_type: Vec<u8>,
+    log_level: Vec<u8>,
     payload_loc: Vec<(u16, u32, u32)>, // (mmap_index, offset, len)
 }
 
@@ -40,7 +45,12 @@ impl Dlt {
         let mut intern = InternTable::new();
         let mut apid = Vec::new();
         let mut ctid = Vec::new();
+        let mut ecu = Vec::new();
+        let mut session_id = Vec::new();
         let mut storage_timestamp_ns = Vec::new();
+        let mut message_timestamp_ns = Vec::new();
+        let mut message_type = Vec::new();
+        let mut log_level = Vec::new();
         let mut payload_loc = Vec::new();
 
         for (file_idx, path) in paths.iter().enumerate() {
@@ -64,10 +74,19 @@ impl Dlt {
                     Some(b) => std::str::from_utf8(b).unwrap_or(""),
                     None => "",
                 };
+                let ecu_str = match &hdr.ecu {
+                    Some(b) => std::str::from_utf8(b).unwrap_or(""),
+                    None => "",
+                };
 
                 apid.push(intern.insert(apid_str));
                 ctid.push(intern.insert(ctid_str));
+                ecu.push(intern.insert(ecu_str));
+                session_id.push(hdr.session_id.unwrap_or(0));
                 storage_timestamp_ns.push(frame.storage_timestamp_ns);
+                message_timestamp_ns.push(hdr.message_timestamp_ns);
+                message_type.push(hdr.message_type);
+                log_level.push(hdr.log_level);
 
                 let payload_offset_in_mmap = frame.msg_start + hdr.payload_offset;
                 payload_loc.push((
@@ -85,7 +104,12 @@ impl Dlt {
             intern,
             apid,
             ctid,
+            ecu,
+            session_id,
             storage_timestamp_ns,
+            message_timestamp_ns,
+            message_type,
+            log_level,
             payload_loc,
         })
     }
@@ -108,6 +132,26 @@ impl Dlt {
 
     pub fn storage_timestamp_ns(&self, row: usize) -> u64 {
         self.storage_timestamp_ns[row]
+    }
+
+    pub fn ecu(&self, row: usize) -> &str {
+        self.intern.resolve(self.ecu[row])
+    }
+
+    pub fn session_id(&self, row: usize) -> u32 {
+        self.session_id[row]
+    }
+
+    pub fn message_timestamp_ns(&self, row: usize) -> u64 {
+        self.message_timestamp_ns[row]
+    }
+
+    pub fn log_level(&self, row: usize) -> u8 {
+        self.log_level[row]
+    }
+
+    pub fn message_type(&self, row: usize) -> u8 {
+        self.message_type[row]
     }
 
     pub fn payload_raw(&self, row: usize) -> &[u8] {
@@ -142,6 +186,12 @@ pub mod test_helpers {
         storage_ecu: [u8; 4],
         apid: Option<[u8; 4]>,
         ctid: Option<[u8; 4]>,
+        ecu: Option<[u8; 4]>,
+        session_id: Option<u32>,
+        message_timestamp_ns: Option<u64>,
+        privacy_level: Option<u8>,
+        message_type: u8,
+        log_level: u8,
         verbose_payload: Vec<u8>,
         noar: u8,
     }
@@ -154,6 +204,12 @@ pub mod test_helpers {
                 storage_ecu: *b"ECU1",
                 apid: None,
                 ctid: None,
+                ecu: None,
+                session_id: None,
+                message_timestamp_ns: None,
+                privacy_level: None,
+                message_type: MESSAGE_TYPE_LOG,
+                log_level: LOG_LEVEL_INFO,
                 verbose_payload: Vec::new(),
                 noar: 0,
             }
@@ -188,6 +244,50 @@ pub mod test_helpers {
             self
         }
 
+        pub fn without_apid(mut self) -> Self {
+            self.apid = None;
+            self
+        }
+
+        pub fn without_ctid(mut self) -> Self {
+            self.ctid = None;
+            self
+        }
+
+        pub fn with_ecu(mut self, ecu: &str) -> Self {
+            let mut buf = [0u8; 4];
+            let bytes = ecu.as_bytes();
+            let n = bytes.len().min(4);
+            buf[..n].copy_from_slice(&bytes[..n]);
+            self.ecu = Some(buf);
+            self
+        }
+
+        pub fn with_session_id(mut self, id: u32) -> Self {
+            self.session_id = Some(id);
+            self
+        }
+
+        pub fn with_timestamp_ns(mut self, ns: u64) -> Self {
+            self.message_timestamp_ns = Some(ns);
+            self
+        }
+
+        pub fn with_privacy_level(mut self, level: u8) -> Self {
+            self.privacy_level = Some(level);
+            self
+        }
+
+        pub fn with_message_type(mut self, mstp: u8) -> Self {
+            self.message_type = mstp;
+            self
+        }
+
+        pub fn with_log_level(mut self, mtin: u8) -> Self {
+            self.log_level = mtin;
+            self
+        }
+
         /// Add a verbose UTF-8 string argument to the payload.
         pub fn with_verbose_string(mut self, s: &str) -> Self {
             // TypeInfo: STRG | SCOD_UTF8 = 0x00008200
@@ -217,19 +317,43 @@ pub mod test_helpers {
 
             // --- Build HTYP2 ---
             let has_wacid = self.apid.is_some() || self.ctid.is_some();
-            let htyp2 = build_htyp2(CNTI_VERBOSE, false, has_wacid, false, PROTOCOL_VERSION_2);
+            let has_weid = self.ecu.is_some();
+            let has_wsid = self.session_id.is_some();
+            let has_wpvl = self.privacy_level.is_some();
+
+            let htyp2 = build_htyp2_full(
+                CNTI_VERBOSE,
+                has_weid,
+                has_wacid,
+                has_wsid,
+                PROTOCOL_VERSION_2,
+                false, // WSFLN
+                false, // WTGS
+                has_wpvl,
+                false, // WSGM
+            );
 
             // --- Compute message length ---
             // Base header: HTYP2(4) + MCNT(1) + LEN(2) = 7
             // + MSIN(1) + NOAR(1) = 2 (verbose)
             // + TMSP2(9) (data message)
             let base_size = 7 + 2 + 9;
-            let ext_size = if has_wacid {
-                let apid_size = self.apid.map_or(1, |_| 5); // 1 len byte + 4 value (or just len=0)
-                let ctid_size = self.ctid.map_or(1, |_| 5);
-                apid_size + ctid_size
-            } else {
-                0
+            let ext_size = {
+                let mut sz = 0;
+                if has_weid {
+                    sz += 1 + 4; // length byte + 4 value bytes
+                }
+                if has_wacid {
+                    sz += self.apid.map_or(1, |_| 5); // 1 len byte + 4 value (or just len=0)
+                    sz += self.ctid.map_or(1, |_| 5);
+                }
+                if has_wsid {
+                    sz += 4; // fixed 4 bytes
+                }
+                if has_wpvl {
+                    sz += 1; // 1 byte
+                }
+                sz
             };
             let payload_size = self.verbose_payload.len();
             let total_len = base_size + ext_size + payload_size;
@@ -239,32 +363,42 @@ pub mod test_helpers {
             msg.push(0); // MCNT
             msg.extend_from_slice(&(total_len as u16).to_be_bytes());
 
-            // MSIN (LOG message, INFO level: MSTP=0, MTIN=4)
-            // v2 MSIN: bit 0 reserved, bits 1-3 MSTP, bits 4-7 MTIN
-            let msin: u8 = (0x00 << 1) | (0x04 << 4); // LOG + INFO
-            msg.push(msin);
+            // MSIN
+            msg.push(build_msin(self.message_type, self.log_level));
             msg.push(self.noar); // NOAR
 
-            // TMSP2 (9 bytes of zeros — timestamp not needed for tracer bullet)
-            msg.extend_from_slice(&[0u8; 9]);
+            // TMSP2
+            let ts_ns = self.message_timestamp_ns.unwrap_or(0);
+            msg.extend_from_slice(&encode_tmsp2(ts_ns));
 
             // --- Extension header ---
+            if has_weid {
+                msg.push(4); // length
+                msg.extend_from_slice(&self.ecu.unwrap());
+            }
+
             if has_wacid {
-                // APID
                 if let Some(apid) = self.apid {
-                    msg.push(4); // length
+                    msg.push(4);
                     msg.extend_from_slice(&apid);
                 } else {
-                    msg.push(0); // absent
+                    msg.push(0);
                 }
 
-                // CTID
                 if let Some(ctid) = self.ctid {
-                    msg.push(4); // length
+                    msg.push(4);
                     msg.extend_from_slice(&ctid);
                 } else {
-                    msg.push(0); // absent
+                    msg.push(0);
                 }
+            }
+
+            if let Some(sid) = self.session_id {
+                msg.extend_from_slice(&sid.to_be_bytes());
+            }
+
+            if let Some(pvl) = self.privacy_level {
+                msg.push(pvl);
             }
 
             // --- Payload ---
@@ -283,10 +417,12 @@ mod tests {
 
     #[test]
     fn v2_roundtrip_single_message() {
+        let ts_ns = 1000u64 * 1_000_000_000 + 42;
         let msg_bytes = V2MessageBuilder::new()
             .with_apid("APP1")
             .with_ctid("CTX1")
             .with_storage_timestamp(1000, 500_000)
+            .with_timestamp_ns(ts_ns)
             .with_verbose_string("hello")
             .build();
 
@@ -307,10 +443,104 @@ mod tests {
             dlt.storage_timestamp_ns(0),
             1000 * 1_000_000_000 + 500_000
         );
+        assert_eq!(dlt.message_timestamp_ns(0), ts_ns);
+        assert_eq!(dlt.message_type(0), protocol::MESSAGE_TYPE_LOG);
+        assert_eq!(dlt.log_level(0), protocol::LOG_LEVEL_INFO);
 
         // Payload should contain the verbose string argument bytes
         let raw = dlt.payload_raw(0);
         assert!(!raw.is_empty());
+    }
+
+    #[test]
+    fn v2_all_fields_populated() {
+        let ts_ns = 42u64 * 1_000_000_000 + 999_999_999;
+        let msg_bytes = V2MessageBuilder::new()
+            .with_apid("AP01")
+            .with_ctid("CT01")
+            .with_ecu("ECU2")
+            .with_session_id(0xDEAD)
+            .with_timestamp_ns(ts_ns)
+            .with_privacy_level(5)
+            .with_message_type(protocol::MESSAGE_TYPE_TRACE)
+            .with_log_level(protocol::LOG_LEVEL_WARN)
+            .with_verbose_string("world")
+            .build();
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("all_fields.dlt");
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            f.write_all(&msg_bytes).unwrap();
+        }
+
+        let dlt = Dlt::open(vec![path]).unwrap();
+
+        assert_eq!(dlt.len(), 1);
+        assert_eq!(dlt.apid(0), "AP01");
+        assert_eq!(dlt.ctid(0), "CT01");
+        assert_eq!(dlt.ecu(0), "ECU2");
+        assert_eq!(dlt.session_id(0), 0xDEAD);
+        assert_eq!(dlt.message_timestamp_ns(0), ts_ns);
+        assert_eq!(dlt.message_type(0), protocol::MESSAGE_TYPE_TRACE);
+        assert_eq!(dlt.log_level(0), protocol::LOG_LEVEL_WARN);
+
+        let raw = dlt.payload_raw(0);
+        assert!(!raw.is_empty());
+    }
+
+    #[test]
+    fn v2_log_level_and_message_type_variants() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("variants.dlt");
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            for (mstp, mtin) in [
+                (protocol::MESSAGE_TYPE_LOG, protocol::LOG_LEVEL_FATAL),
+                (protocol::MESSAGE_TYPE_TRACE, protocol::LOG_LEVEL_ERROR),
+                (protocol::MESSAGE_TYPE_NETWORK, protocol::LOG_LEVEL_WARN),
+                (protocol::MESSAGE_TYPE_CONTROL, protocol::LOG_LEVEL_INFO),
+            ] {
+                let msg = V2MessageBuilder::new()
+                    .with_apid("APP1")
+                    .with_ctid("CTX1")
+                    .with_message_type(mstp)
+                    .with_log_level(mtin)
+                    .build();
+                f.write_all(&msg).unwrap();
+            }
+        }
+
+        let dlt = Dlt::open(vec![path]).unwrap();
+        assert_eq!(dlt.len(), 4);
+
+        assert_eq!(dlt.message_type(0), protocol::MESSAGE_TYPE_LOG);
+        assert_eq!(dlt.log_level(0), protocol::LOG_LEVEL_FATAL);
+        assert_eq!(dlt.message_type(1), protocol::MESSAGE_TYPE_TRACE);
+        assert_eq!(dlt.log_level(1), protocol::LOG_LEVEL_ERROR);
+        assert_eq!(dlt.message_type(2), protocol::MESSAGE_TYPE_NETWORK);
+        assert_eq!(dlt.log_level(2), protocol::LOG_LEVEL_WARN);
+        assert_eq!(dlt.message_type(3), protocol::MESSAGE_TYPE_CONTROL);
+        assert_eq!(dlt.log_level(3), protocol::LOG_LEVEL_INFO);
+    }
+
+    #[test]
+    fn v2_flags_cleared_returns_empty_sentinels() {
+        let msg_bytes = V2MessageBuilder::new().build();
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("no_ext.dlt");
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            f.write_all(&msg_bytes).unwrap();
+        }
+
+        let dlt = Dlt::open(vec![path]).unwrap();
+        assert_eq!(dlt.len(), 1);
+        assert_eq!(dlt.apid(0), "");
+        assert_eq!(dlt.ctid(0), "");
+        assert_eq!(dlt.ecu(0), "");
+        assert_eq!(dlt.session_id(0), 0);
     }
 
     #[test]
