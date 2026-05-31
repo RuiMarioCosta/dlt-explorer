@@ -15,6 +15,7 @@ use std::fmt;
 use std::fs::File;
 use std::path::PathBuf;
 
+use error::{ParseError, ParseErrorKind};
 use framer::scan_frames;
 use header::parse_v2_header;
 use intern::InternTable;
@@ -39,8 +40,9 @@ pub struct Dlt {
 impl Dlt {
     /// Open and parse one or more DLT v2 files.
     ///
-    /// Non-v2 messages are silently skipped.
-    pub fn open(paths: Vec<PathBuf>) -> Result<Self> {
+    /// Returns successfully parsed messages alongside any errors encountered.
+    /// Non-v2 messages and malformed frames are recorded as errors and skipped.
+    pub fn open(paths: Vec<PathBuf>) -> Result<(Self, Vec<ParseError>)> {
         let mut mmaps = Vec::with_capacity(paths.len());
         let mut intern = InternTable::new();
         let mut apid = Vec::new();
@@ -52,6 +54,7 @@ impl Dlt {
         let mut message_type = Vec::new();
         let mut log_level = Vec::new();
         let mut payload_loc = Vec::new();
+        let mut all_errors = Vec::new();
 
         for (file_idx, path) in paths.iter().enumerate() {
             let file = File::open(path)?;
@@ -59,10 +62,18 @@ impl Dlt {
             // lifetime of the Dlt struct.
             let mmap = unsafe { Mmap::map(&file)? };
 
-            for frame in scan_frames(&mmap) {
+            let (frames, frame_errors) = scan_frames(&mmap, file_idx as u16);
+            all_errors.extend(frame_errors);
+
+            for frame in frames {
                 let msg = &mmap[frame.msg_start..frame.msg_start + frame.msg_len];
 
                 let Some(hdr) = parse_v2_header(msg) else {
+                    all_errors.push(ParseError {
+                        file_index: file_idx as u16,
+                        byte_offset: frame.msg_start as u64,
+                        kind: ParseErrorKind::InvalidExtensionField,
+                    });
                     continue;
                 };
 
@@ -99,7 +110,7 @@ impl Dlt {
             mmaps.push(mmap);
         }
 
-        Ok(Dlt {
+        Ok((Dlt {
             mmaps,
             intern,
             apid,
@@ -111,7 +122,7 @@ impl Dlt {
             message_type,
             log_level,
             payload_loc,
-        })
+        }, all_errors))
     }
 
     pub fn len(&self) -> usize {
@@ -413,6 +424,7 @@ pub mod test_helpers {
 mod tests {
     use super::test_helpers::V2MessageBuilder;
     use super::*;
+    use error::ParseErrorKind;
     use std::io::Write;
 
     #[test]
@@ -433,8 +445,9 @@ mod tests {
             f.write_all(&msg_bytes).unwrap();
         }
 
-        let dlt = Dlt::open(vec![path]).unwrap();
+        let (dlt, errors) = Dlt::open(vec![path]).unwrap();
 
+        assert_eq!(errors.len(), 0);
         assert_eq!(dlt.len(), 1);
         assert!(!dlt.is_empty());
         assert_eq!(dlt.apid(0), "APP1");
@@ -474,8 +487,9 @@ mod tests {
             f.write_all(&msg_bytes).unwrap();
         }
 
-        let dlt = Dlt::open(vec![path]).unwrap();
+        let (dlt, errors) = Dlt::open(vec![path]).unwrap();
 
+        assert_eq!(errors.len(), 0);
         assert_eq!(dlt.len(), 1);
         assert_eq!(dlt.apid(0), "AP01");
         assert_eq!(dlt.ctid(0), "CT01");
@@ -511,7 +525,7 @@ mod tests {
             }
         }
 
-        let dlt = Dlt::open(vec![path]).unwrap();
+        let (dlt, _errors) = Dlt::open(vec![path]).unwrap();
         assert_eq!(dlt.len(), 4);
 
         assert_eq!(dlt.message_type(0), protocol::MESSAGE_TYPE_LOG);
@@ -535,7 +549,8 @@ mod tests {
             f.write_all(&msg_bytes).unwrap();
         }
 
-        let dlt = Dlt::open(vec![path]).unwrap();
+        let (dlt, errors) = Dlt::open(vec![path]).unwrap();
+        assert_eq!(errors.len(), 0);
         assert_eq!(dlt.len(), 1);
         assert_eq!(dlt.apid(0), "");
         assert_eq!(dlt.ctid(0), "");
@@ -549,8 +564,9 @@ mod tests {
         let path = dir.path().join("empty.dlt");
         std::fs::File::create(&path).unwrap();
 
-        let dlt = Dlt::open(vec![path]).unwrap();
+        let (dlt, errors) = Dlt::open(vec![path]).unwrap();
         assert_eq!(dlt.len(), 0);
+        assert_eq!(errors.len(), 0);
         assert!(dlt.is_empty());
     }
 
@@ -559,8 +575,76 @@ mod tests {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("tests/data/testfile_control_messages.dlt");
 
-        let dlt = Dlt::open(vec![path]).unwrap();
-        // v1 messages should be silently skipped
+        let (dlt, errors) = Dlt::open(vec![path]).unwrap();
+        // v1 messages reported as InvalidVersion errors
         assert_eq!(dlt.len(), 0);
+        assert!(!errors.is_empty());
+        assert!(errors.iter().all(|e| matches!(e.kind, ParseErrorKind::InvalidVersion { .. })));
+    }
+
+    #[test]
+    fn v2_empty_file_no_errors() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty.dlt");
+        std::fs::File::create(&path).unwrap();
+
+        let (dlt, errors) = Dlt::open(vec![path]).unwrap();
+        assert_eq!(dlt.len(), 0);
+        assert_eq!(errors.len(), 0);
+    }
+
+    #[test]
+    fn v2_truncated_file_collects_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("truncated.dlt");
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            // Write a valid message followed by a truncated storage header
+            let msg = V2MessageBuilder::new()
+                .with_apid("APP1")
+                .with_ctid("CTX1")
+                .build();
+            f.write_all(&msg).unwrap();
+            // Truncated: DLT\x01 + a few bytes, not enough for storage + base header
+            f.write_all(b"DLT\x01\x00\x00").unwrap();
+        }
+
+        let (dlt, errors) = Dlt::open(vec![path]).unwrap();
+        assert_eq!(dlt.len(), 1);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].kind, ParseErrorKind::Truncated);
+    }
+
+    #[test]
+    fn v2_corrupted_message_in_middle() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("corrupted_middle.dlt");
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            // Message 1 (valid)
+            f.write_all(&V2MessageBuilder::new().with_apid("APP1").with_ctid("CTX1").build()).unwrap();
+            // Corrupted message: valid storage header, but version=3
+            let mut bad = Vec::new();
+            bad.extend_from_slice(b"DLT\x01");
+            bad.extend_from_slice(&0u32.to_le_bytes());
+            bad.extend_from_slice(&0u32.to_le_bytes());
+            bad.push(0);
+            bad.extend_from_slice(b"ECU1");
+            let bad_htyp2 = protocol::build_htyp2(protocol::CNTI_VERBOSE, false, false, false, 3);
+            bad.extend_from_slice(&bad_htyp2.to_be_bytes());
+            bad.push(0);
+            bad.extend_from_slice(&9u16.to_be_bytes());
+            bad.push(0);
+            bad.push(0);
+            f.write_all(&bad).unwrap();
+            // Message 2 (valid)
+            f.write_all(&V2MessageBuilder::new().with_apid("APP2").with_ctid("CTX2").build()).unwrap();
+            // Message 3 (valid)
+            f.write_all(&V2MessageBuilder::new().with_apid("APP3").with_ctid("CTX3").build()).unwrap();
+        }
+
+        let (dlt, errors) = Dlt::open(vec![path]).unwrap();
+        assert_eq!(dlt.len(), 3);
+        assert_eq!(errors.len(), 1);
     }
 }

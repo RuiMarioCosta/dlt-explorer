@@ -1,5 +1,6 @@
 use memchr::memmem::Finder;
 
+use super::error::{ParseError, ParseErrorKind};
 use super::protocol::*;
 
 /// A located DLT v2 frame within memory-mapped data.
@@ -14,12 +15,14 @@ pub struct Frame {
     pub msg_len: usize,
 }
 
-/// Scan `data` for DLT v2 frames, returning one `Frame` per valid v2 message found.
+/// Scan `data` for DLT v2 frames, returning one `Frame` per valid v2 message
+/// found, plus any `ParseError`s for malformed frames encountered along the way.
 ///
-/// Non-v2 messages (e.g. v1) are silently skipped.
-pub fn scan_frames(data: &[u8]) -> Vec<Frame> {
+/// On error the scanner advances to the next `DLT\x01` marker.
+pub fn scan_frames(data: &[u8], file_index: u16) -> (Vec<Frame>, Vec<ParseError>) {
     let finder = Finder::new(DLT_STORAGE_HEADER_PATTERN);
     let mut frames = Vec::new();
+    let mut errors = Vec::new();
     let mut search_start = 0;
 
     while let Some(rel_pos) = finder.find(&data[search_start..]) {
@@ -28,6 +31,11 @@ pub fn scan_frames(data: &[u8]) -> Vec<Frame> {
 
         // Need at least the storage header + minimum base header to proceed
         if storage_end + BASE_HEADER_MIN_SIZE > data.len() {
+            errors.push(ParseError {
+                file_index,
+                byte_offset: pos as u64,
+                kind: ParseErrorKind::Truncated,
+            });
             break;
         }
 
@@ -43,16 +51,43 @@ pub fn scan_frames(data: &[u8]) -> Vec<Frame> {
         let msg_start = storage_end;
         let htyp2 = u32::from_be_bytes(data[msg_start..msg_start + 4].try_into().unwrap());
 
-        // Skip non-v2 messages
-        if htyp2_version(htyp2) != PROTOCOL_VERSION_2 {
+        // Report non-v2 messages
+        let version = htyp2_version(htyp2);
+        if version != PROTOCOL_VERSION_2 {
+            errors.push(ParseError {
+                file_index,
+                byte_offset: pos as u64,
+                kind: ParseErrorKind::InvalidVersion { found: version },
+            });
             search_start = pos + 1;
             continue;
         }
 
         let len =
-            u16::from_be_bytes(data[msg_start + 5..msg_start + 7].try_into().unwrap()) as usize;
+            u16::from_be_bytes(data[msg_start + 5..msg_start + 7].try_into().unwrap());
 
-        if len < BASE_HEADER_MIN_SIZE || msg_start + len > data.len() {
+        if (len as usize) < BASE_HEADER_MIN_SIZE {
+            errors.push(ParseError {
+                file_index,
+                byte_offset: pos as u64,
+                kind: ParseErrorKind::LengthMismatch {
+                    declared: len,
+                    available: data.len() - msg_start,
+                },
+            });
+            search_start = pos + 1;
+            continue;
+        }
+
+        if msg_start + len as usize > data.len() {
+            errors.push(ParseError {
+                file_index,
+                byte_offset: pos as u64,
+                kind: ParseErrorKind::LengthMismatch {
+                    declared: len,
+                    available: (data.len() - msg_start),
+                },
+            });
             search_start = pos + 1;
             continue;
         }
@@ -61,14 +96,14 @@ pub fn scan_frames(data: &[u8]) -> Vec<Frame> {
             storage_timestamp_ns: timestamp_ns,
             storage_ecu: ecu,
             msg_start,
-            msg_len: len,
+            msg_len: len as usize,
         });
 
         // Advance past this message
-        search_start = msg_start + len;
+        search_start = msg_start + len as usize;
     }
 
-    frames
+    (frames, errors)
 }
 
 #[cfg(test)]
@@ -101,8 +136,9 @@ mod tests {
     #[test]
     fn finds_single_v2_frame() {
         let data = minimal_v2_frame();
-        let frames = scan_frames(&data);
+        let (frames, errors) = scan_frames(&data, 0);
         assert_eq!(frames.len(), 1);
+        assert_eq!(errors.len(), 0);
         assert_eq!(frames[0].storage_timestamp_ns, 100 * 1_000_000_000 + 500);
         assert_eq!(&frames[0].storage_ecu, b"ECU1");
     }
@@ -125,19 +161,129 @@ mod tests {
         buf.push(0);
         buf.push(0);
 
-        let frames = scan_frames(&buf);
+        let (frames, errors) = scan_frames(&buf, 0);
         assert_eq!(frames.len(), 0);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].kind, ParseErrorKind::InvalidVersion { found: 1 });
     }
 
     #[test]
     fn empty_input() {
-        let frames = scan_frames(&[]);
+        let (frames, errors) = scan_frames(&[], 0);
         assert_eq!(frames.len(), 0);
+        assert_eq!(errors.len(), 0);
     }
 
     #[test]
     fn truncated_storage_header() {
-        let frames = scan_frames(b"DLT\x01too_short");
+        let (frames, errors) = scan_frames(b"DLT\x01too_short", 0);
         assert_eq!(frames.len(), 0);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].kind, ParseErrorKind::Truncated);
+    }
+
+    #[test]
+    fn truncated_mid_header_no_panic() {
+        // File ends mid-header (storage header present but base header truncated)
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"DLT\x01");
+        buf.extend_from_slice(&0u32.to_le_bytes());
+        buf.extend_from_slice(&0u32.to_le_bytes());
+        buf.push(0);
+        buf.extend_from_slice(b"ECU1");
+        // Only 3 bytes of base header instead of 7
+        buf.extend_from_slice(&[0x00, 0x00, 0x00]);
+
+        let (frames, errors) = scan_frames(&buf, 0);
+        assert_eq!(frames.len(), 0);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].kind, ParseErrorKind::Truncated);
+    }
+
+    #[test]
+    fn garbage_between_valid_messages() {
+        let mut data = minimal_v2_frame();
+        // Insert garbage with a DLT\x01 marker but invalid version
+        data.extend_from_slice(b"DLT\x01");
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.extend_from_slice(&0u32.to_le_bytes());
+        data.push(0);
+        data.extend_from_slice(b"ECU1");
+        let bad_htyp2 = build_htyp2(CNTI_VERBOSE, false, false, false, 3); // invalid version
+        data.extend_from_slice(&bad_htyp2.to_be_bytes());
+        data.push(0);
+        data.extend_from_slice(&9u16.to_be_bytes());
+        data.push(0);
+        data.push(0);
+        // Second valid message
+        data.extend_from_slice(&minimal_v2_frame());
+
+        let (frames, errors) = scan_frames(&data, 0);
+        assert_eq!(frames.len(), 2);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].kind, ParseErrorKind::InvalidVersion { found: 3 });
+    }
+
+    #[test]
+    fn length_mismatch_declared_exceeds_available() {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"DLT\x01");
+        buf.extend_from_slice(&0u32.to_le_bytes());
+        buf.extend_from_slice(&0u32.to_le_bytes());
+        buf.push(0);
+        buf.extend_from_slice(b"ECU1");
+        let htyp2 = build_htyp2(CNTI_VERBOSE, false, false, false, PROTOCOL_VERSION_2);
+        buf.extend_from_slice(&htyp2.to_be_bytes());
+        buf.push(0);
+        // Declared length far exceeds available data
+        buf.extend_from_slice(&500u16.to_be_bytes());
+        buf.push(0);
+        buf.push(0);
+
+        let (frames, errors) = scan_frames(&buf, 0);
+        assert_eq!(frames.len(), 0);
+        assert_eq!(errors.len(), 1);
+        match &errors[0].kind {
+            ParseErrorKind::LengthMismatch { declared, .. } => assert_eq!(*declared, 500),
+            other => panic!("expected LengthMismatch, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn marker_in_payload_not_confused_as_frame() {
+        // Build a valid frame whose payload contains DLT\x01
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"DLT\x01");
+        buf.extend_from_slice(&100u32.to_le_bytes());
+        buf.extend_from_slice(&0u32.to_le_bytes());
+        buf.push(0);
+        buf.extend_from_slice(b"ECU1");
+
+        let htyp2 = build_htyp2(CNTI_VERBOSE, false, false, false, PROTOCOL_VERSION_2);
+        buf.extend_from_slice(&htyp2.to_be_bytes());
+        buf.push(0); // MCNT
+        // payload = DLT\x01 (4 bytes), so total len = 7 + 2 + 4 = 13
+        let len: u16 = 13;
+        buf.extend_from_slice(&len.to_be_bytes());
+        buf.push(0); // MSIN
+        buf.push(0); // NOAR
+        buf.extend_from_slice(b"DLT\x01"); // fake marker in payload
+
+        let (frames, errors) = scan_frames(&buf, 0);
+        assert_eq!(frames.len(), 1);
+        assert_eq!(errors.len(), 0);
+    }
+
+    #[test]
+    fn file_ending_mid_message_after_valid() {
+        let mut data = minimal_v2_frame();
+        // Append a truncated storage header (only pattern + partial data)
+        data.extend_from_slice(b"DLT\x01");
+        data.extend_from_slice(&[0u8; 5]); // not enough for full storage + base header
+
+        let (frames, errors) = scan_frames(&data, 0);
+        assert_eq!(frames.len(), 1);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].kind, ParseErrorKind::Truncated);
     }
 }
