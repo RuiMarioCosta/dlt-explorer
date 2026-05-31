@@ -1,4 +1,5 @@
 use crate::dlt::v1::Dlt;
+use crate::dlt::payload::{LOG_INFO, MESSAGE_TYPE};
 use iced::widget::{button, column, container, row, scrollable, text, Row};
 use iced::{Color, Element, Font, Length, Task};
 use std::sync::Arc;
@@ -116,24 +117,31 @@ async fn open_and_parse_file() -> FileResult {
     };
 
     let path = handle.path().to_path_buf();
-    match Dlt::from_files(vec![path], None) {
-        Ok(dlt) => FileResult::Loaded(Arc::new(dlt_to_rows(&dlt))),
+    match Dlt::open(vec![path]) {
+        Ok((dlt, _errors)) => FileResult::Loaded(Arc::new(dlt_to_rows(&dlt))),
         Err(e) => FileResult::Error(e.to_string()),
     }
 }
 
 fn dlt_to_rows(dlt: &Dlt) -> Vec<DltRow> {
-    (0..dlt.size())
-        .map(|i| DltRow {
-            index: i,
-            seconds: dlt.seconds()[i],
-            microseconds: dlt.microseconds()[i],
-            ecu: dlt.ecus()[i].clone(),
-            apid: dlt.apids()[i].clone(),
-            ctid: dlt.ctids()[i].clone(),
-            message_type: dlt.message_types()[i].to_string(),
-            log_info: dlt.log_infos()[i].to_string(),
-            payload: dlt.payloads()[i].clone(),
+    (0..dlt.len())
+        .map(|i| {
+            let ts_ns = dlt.storage_timestamp_ns(i);
+            let seconds = (ts_ns / 1_000_000_000) as u32;
+            let microseconds = ((ts_ns % 1_000_000_000) / 1_000) as i32;
+            let mstp = dlt.message_type(i) as usize;
+            let mtin = dlt.log_level(i) as usize;
+            DltRow {
+                index: i,
+                seconds,
+                microseconds,
+                ecu: dlt.ecu(i).to_string(),
+                apid: dlt.apid(i).to_string(),
+                ctid: dlt.ctid(i).to_string(),
+                message_type: MESSAGE_TYPE.get(mstp).copied().unwrap_or("").to_string(),
+                log_info: LOG_INFO.get(mtin).copied().unwrap_or("").to_string(),
+                payload: dlt.payload_text(i),
+            }
         })
         .collect()
 }

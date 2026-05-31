@@ -3,6 +3,7 @@ use crate::dlt::protocol::*;
 /// Parsed v1 header information.
 pub struct ParsedHeader {
     pub htyp: u8,
+    pub msin: u8,
     pub ecu: Option<[u8; 4]>,
     pub apid: Option<[u8; 4]>,
     pub ctid: Option<[u8; 4]>,
@@ -88,15 +89,16 @@ pub fn parse_v1_header(msg: &[u8]) -> Option<ParsedHeader> {
     let mut ctid = None;
     let mut message_type: u8 = 0;
     let mut log_level: u8 = 0;
+    let mut msin_byte: u8 = 0;
 
     if htyp_has_ueh(htyp) {
         if offset + V1_EXT_HEADER_SIZE > msg.len() {
             return None;
         }
-        let msin = msg[offset];
+        msin_byte = msg[offset];
         // NOAR at offset+1 (skip)
-        message_type = msin_mstp(msin);
-        log_level = msin_mtin(msin);
+        message_type = msin_mstp(msin_byte);
+        log_level = msin_mtin(msin_byte);
 
         let apid_start = offset + 2;
         apid = Some(msg[apid_start..apid_start + 4].try_into().ok()?);
@@ -112,6 +114,7 @@ pub fn parse_v1_header(msg: &[u8]) -> Option<ParsedHeader> {
 
     Some(ParsedHeader {
         htyp,
+        msin: msin_byte,
         ecu,
         apid,
         ctid,
