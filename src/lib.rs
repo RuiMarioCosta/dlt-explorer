@@ -49,8 +49,11 @@ fn process_in_terminal(args: Cli) -> Result<()> {
     println!("DLT Version: {}", version);
 
     if version == 1 {
-        let dlt = dlt::v1::Dlt::from_files(paths, args.filter)?;
-        println!("{}", dlt);
+        let (dlt, errors) = dlt::v1::Dlt::open(paths)?;
+        if !errors.is_empty() {
+            eprintln!("{} parse error(s) encountered", errors.len());
+        }
+        println!("{:?}", dlt);
     } else {
         let (dlt, errors) = Dlt::open(paths)?;
         if !errors.is_empty() {
