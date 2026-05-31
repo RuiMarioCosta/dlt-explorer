@@ -33,7 +33,10 @@ fn process_in_terminal(args: Cli) -> Result<()> {
         paths.sort();
     }
 
-    let dlt = Dlt::open(paths)?;
+    let (dlt, errors) = Dlt::open(paths)?;
+    if !errors.is_empty() {
+        eprintln!("{} parse error(s) encountered", errors.len());
+    }
     println!("{:?}", dlt);
 
     Ok(())
