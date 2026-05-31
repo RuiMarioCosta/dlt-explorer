@@ -1,5 +1,6 @@
 // v1 format — re-enable when v1 support is added
 
+pub mod framer;
 pub mod header;
 
 use anyhow::Result;
