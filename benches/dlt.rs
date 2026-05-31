@@ -1,6 +1,6 @@
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use dlt_explorer::dlt::Dlt;
-use dlt_explorer::dlt::test_helpers::V2MessageBuilder;
+use dlt_explorer::dlt::v2::Dlt;
+use dlt_explorer::dlt::v2::test_helpers::V2MessageBuilder;
 use std::io::Write;
 use std::path::PathBuf;
 

@@ -1,4 +1,4 @@
-use super::protocol::*;
+use crate::dlt::protocol::*;
 
 /// Parsed v2 header information.
 pub struct ParsedHeader {

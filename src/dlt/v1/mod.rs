@@ -11,8 +11,8 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
 
-use super::payload::*;
-use super::protocol::*;
+use crate::dlt::payload::*;
+use crate::dlt::protocol::*;
 
 const DLT_DELIMITER: &[u8] = b"DLT\x01";
 const BUFFER_SIZE: usize = 1 << 13; // 8 KiB

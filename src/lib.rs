@@ -3,7 +3,7 @@ pub mod dlt;
 mod gui;
 
 use anyhow::{Result, anyhow};
-use dlt::Dlt;
+use dlt::v2::Dlt;
 use gui::DltExplorer;
 
 pub use cmd_line_parser::{Cli, Parser};

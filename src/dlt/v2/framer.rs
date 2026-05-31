@@ -1,7 +1,7 @@
 use memchr::memmem::Finder;
 
 use super::error::{ParseError, ParseErrorKind};
-use super::protocol::*;
+use crate::dlt::protocol::*;
 
 /// A located DLT v2 frame within memory-mapped data.
 pub struct Frame {
