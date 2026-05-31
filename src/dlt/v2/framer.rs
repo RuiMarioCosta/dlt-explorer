@@ -1,6 +1,6 @@
 use memchr::memmem::Finder;
 
-use super::error::{ParseError, ParseErrorKind};
+use crate::dlt::error::{ParseError, ParseErrorKind};
 use crate::dlt::protocol::*;
 
 /// A located DLT v2 frame within memory-mapped data.
