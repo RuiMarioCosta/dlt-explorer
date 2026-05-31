@@ -211,6 +211,92 @@ pub fn decode_tmsp2(tmsp2: &[u8; 9]) -> u64 {
     seconds.saturating_mul(1_000_000_000).saturating_add(nanoseconds as u64)
 }
 
+// ---------------------------------------------------------------------------
+// v1 HTYP bitfield definitions
+// ---------------------------------------------------------------------------
+
+const DLT_HTYP_UEH: u8 = 0x01; // use extended header
+const DLT_HTYP_WEID: u8 = 0x04; // with ECU ID
+const DLT_HTYP_WSID: u8 = 0x08; // with session ID
+const DLT_HTYP_WTMS: u8 = 0x10; // with timestamp
+
+#[inline]
+pub fn htyp_has_ueh(htyp: u8) -> bool {
+    htyp & DLT_HTYP_UEH != 0
+}
+
+#[inline]
+pub fn htyp_has_weid(htyp: u8) -> bool {
+    htyp & DLT_HTYP_WEID != 0
+}
+
+#[inline]
+pub fn htyp_has_wsid(htyp: u8) -> bool {
+    htyp & DLT_HTYP_WSID != 0
+}
+
+#[inline]
+pub fn htyp_has_wtms(htyp: u8) -> bool {
+    htyp & DLT_HTYP_WTMS != 0
+}
+
+// ---------------------------------------------------------------------------
+// v1 MSIN verb helper
+// ---------------------------------------------------------------------------
+
+#[inline]
+pub fn msin_is_verb(msin: u8) -> bool {
+    (msin & 0x01) != 0
+}
+
+// ---------------------------------------------------------------------------
+// v1 message type / control type constants
+// ---------------------------------------------------------------------------
+
+pub const DLT_TYPE_CONTROL: u8 = 0x03;
+pub const DLT_CONTROL_RESPONSE: u8 = 0x02;
+
+// ---------------------------------------------------------------------------
+// Size constants (shared)
+// ---------------------------------------------------------------------------
+
+pub const DLT_ID_SIZE: usize = 4;
+pub const DLT_SIZE_WEID: usize = DLT_ID_SIZE;
+pub const DLT_SIZE_WSID: usize = 4;
+pub const DLT_SIZE_WTMS: usize = 4;
+
+// ---------------------------------------------------------------------------
+// v1 message classification helpers
+// ---------------------------------------------------------------------------
+
+pub fn standard_header_extra_size(htyp: u8) -> usize {
+    let mut size = 0;
+    if htyp_has_weid(htyp) {
+        size += DLT_SIZE_WEID;
+    }
+    if htyp_has_wsid(htyp) {
+        size += DLT_SIZE_WSID;
+    }
+    if htyp_has_wtms(htyp) {
+        size += DLT_SIZE_WTMS;
+    }
+    size
+}
+
+pub fn msg_is_control(htyp: u8, msin: u8) -> bool {
+    htyp_has_ueh(htyp) && (msin_mstp(msin) == DLT_TYPE_CONTROL)
+}
+
+pub fn msg_is_control_response(htyp: u8, msin: u8) -> bool {
+    htyp_has_ueh(htyp)
+        && (msin_mstp(msin) == DLT_TYPE_CONTROL)
+        && (msin_mtin(msin) == DLT_CONTROL_RESPONSE)
+}
+
+pub fn msg_is_nonverbose(htyp: u8, msin: u8) -> bool {
+    !htyp_has_ueh(htyp) || (htyp_has_ueh(htyp) && !msin_is_verb(msin))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
