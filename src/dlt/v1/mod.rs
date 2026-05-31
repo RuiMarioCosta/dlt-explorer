@@ -1,5 +1,7 @@
 // v1 format — re-enable when v1 support is added
 
+pub mod header;
+
 use anyhow::Result;
 use byteorder::{NativeEndian, ReadBytesExt};
 use core::fmt;
