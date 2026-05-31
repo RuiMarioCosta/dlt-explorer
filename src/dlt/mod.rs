@@ -179,6 +179,35 @@ impl Dlt {
         let cnti = self.cnti[row];
         payload::decode_payload(cnti, raw)
     }
+
+    /// Sorted, deduplicated list of all APID strings seen.
+    pub fn unique_apids(&self) -> Vec<&str> {
+        unique_interned(&self.apid, &self.intern)
+    }
+
+    /// Sorted, deduplicated list of all CTID strings seen.
+    pub fn unique_ctids(&self) -> Vec<&str> {
+        unique_interned(&self.ctid, &self.intern)
+    }
+
+    /// Sorted, deduplicated list of all ECU strings seen.
+    pub fn unique_ecus(&self) -> Vec<&str> {
+        unique_interned(&self.ecu, &self.intern)
+    }
+}
+
+/// Collect sorted unique non-empty strings from an interned column.
+fn unique_interned<'a>(col: &[u16], intern: &'a InternTable) -> Vec<&'a str> {
+    let mut ids: Vec<u16> = col.to_vec();
+    ids.sort_unstable();
+    ids.dedup();
+    let mut result: Vec<&str> = ids
+        .into_iter()
+        .map(|id| intern.resolve(id))
+        .filter(|s| !s.is_empty())
+        .collect();
+    result.sort_unstable();
+    result
 }
 
 impl fmt::Debug for Dlt {
@@ -191,10 +220,9 @@ impl fmt::Debug for Dlt {
 }
 
 // ---------------------------------------------------------------------------
-// V2MessageBuilder — test helper for constructing synthetic v2 messages
+// V2MessageBuilder — helper for constructing synthetic v2 messages
 // ---------------------------------------------------------------------------
 
-#[cfg(test)]
 pub mod test_helpers {
     use super::protocol::*;
 
@@ -677,5 +705,150 @@ mod tests {
         assert_eq!(errors.len(), 0);
         assert_eq!(dlt.len(), 1);
         assert_eq!(dlt.payload_text(0), "hello payload");
+    }
+
+    // -----------------------------------------------------------------------
+    // Multi-file support, unique accessors, and sorted interleaving tests
+    // -----------------------------------------------------------------------
+
+    /// Helper: write messages to a temp file, returning its path.
+    fn write_v2_file(dir: &std::path::Path, name: &str, msgs: &[Vec<u8>]) -> PathBuf {
+        let path = dir.join(name);
+        let mut f = std::fs::File::create(&path).unwrap();
+        for msg in msgs {
+            f.write_all(msg).unwrap();
+        }
+        path
+    }
+
+    #[test]
+    fn multi_file_len_equals_sum() {
+        let dir = tempfile::tempdir().unwrap();
+        let file1 = write_v2_file(dir.path(), "a.dlt", &[
+            V2MessageBuilder::new().with_ecu("ECU1").with_apid("AP01").with_ctid("CT01")
+                .with_storage_timestamp(100, 0).build(),
+            V2MessageBuilder::new().with_ecu("ECU1").with_apid("AP01").with_ctid("CT02")
+                .with_storage_timestamp(200, 0).build(),
+        ]);
+        let file2 = write_v2_file(dir.path(), "b.dlt", &[
+            V2MessageBuilder::new().with_ecu("ECU2").with_apid("AP02").with_ctid("CT03")
+                .with_storage_timestamp(150, 0).build(),
+        ]);
+
+        let (dlt, errors) = Dlt::open(vec![file1, file2]).unwrap();
+        assert_eq!(errors.len(), 0);
+        assert_eq!(dlt.len(), 3); // 2 + 1
+    }
+
+    #[test]
+    fn multi_file_payload_raw_accessible() {
+        let dir = tempfile::tempdir().unwrap();
+        let file1 = write_v2_file(dir.path(), "a.dlt", &[
+            V2MessageBuilder::new().with_ecu("ECU1").with_apid("AP01").with_ctid("CT01")
+                .with_storage_timestamp(100, 0).with_verbose_string("from-file-1").build(),
+        ]);
+        let file2 = write_v2_file(dir.path(), "b.dlt", &[
+            V2MessageBuilder::new().with_ecu("ECU2").with_apid("AP02").with_ctid("CT02")
+                .with_storage_timestamp(200, 0).with_verbose_string("from-file-2").build(),
+        ]);
+
+        let (dlt, errors) = Dlt::open(vec![file1, file2]).unwrap();
+        assert_eq!(errors.len(), 0);
+        // Both payloads accessible without panic
+        for row in 0..dlt.len() {
+            let raw = dlt.payload_raw(row);
+            assert!(!raw.is_empty());
+        }
+    }
+
+    #[test]
+    fn multi_file_unique_ecus_sorted() {
+        let dir = tempfile::tempdir().unwrap();
+        let file1 = write_v2_file(dir.path(), "a.dlt", &[
+            V2MessageBuilder::new().with_ecu("ZZZ1").with_storage_timestamp(100, 0).build(),
+        ]);
+        let file2 = write_v2_file(dir.path(), "b.dlt", &[
+            V2MessageBuilder::new().with_ecu("AAA1").with_storage_timestamp(200, 0).build(),
+        ]);
+
+        let (dlt, _) = Dlt::open(vec![file1, file2]).unwrap();
+        let ecus = dlt.unique_ecus();
+        assert_eq!(ecus, vec!["AAA1", "ZZZ1"]);
+    }
+
+    #[test]
+    fn multi_file_unique_apids_and_ctids_deduplicated() {
+        let dir = tempfile::tempdir().unwrap();
+        let file1 = write_v2_file(dir.path(), "a.dlt", &[
+            V2MessageBuilder::new().with_apid("APP1").with_ctid("CTX1")
+                .with_storage_timestamp(100, 0).build(),
+            V2MessageBuilder::new().with_apid("APP2").with_ctid("CTX1")
+                .with_storage_timestamp(200, 0).build(),
+        ]);
+        let file2 = write_v2_file(dir.path(), "b.dlt", &[
+            V2MessageBuilder::new().with_apid("APP1").with_ctid("CTX2")
+                .with_storage_timestamp(150, 0).build(),
+            V2MessageBuilder::new().with_apid("APP3").with_ctid("CTX2")
+                .with_storage_timestamp(250, 0).build(),
+        ]);
+
+        let (dlt, _) = Dlt::open(vec![file1, file2]).unwrap();
+
+        let apids = dlt.unique_apids();
+        assert_eq!(apids, vec!["APP1", "APP2", "APP3"]);
+
+        let ctids = dlt.unique_ctids();
+        assert_eq!(ctids, vec!["CTX1", "CTX2"]);
+    }
+
+    #[test]
+    fn multi_file_preserves_file_order() {
+        let dir = tempfile::tempdir().unwrap();
+        // File 1: timestamps 100, 300
+        let file1 = write_v2_file(dir.path(), "a.dlt", &[
+            V2MessageBuilder::new().with_ecu("ECU1").with_storage_timestamp(100, 0).build(),
+            V2MessageBuilder::new().with_ecu("ECU1").with_storage_timestamp(300, 0).build(),
+        ]);
+        // File 2: timestamps 50, 200
+        let file2 = write_v2_file(dir.path(), "b.dlt", &[
+            V2MessageBuilder::new().with_ecu("ECU2").with_storage_timestamp(50, 0).build(),
+            V2MessageBuilder::new().with_ecu("ECU2").with_storage_timestamp(200, 0).build(),
+        ]);
+
+        let (dlt, errors) = Dlt::open(vec![file1, file2]).unwrap();
+        assert_eq!(errors.len(), 0);
+        assert_eq!(dlt.len(), 4);
+
+        // Messages appear in file order: file1 first, then file2
+        let timestamps: Vec<u64> = (0..dlt.len())
+            .map(|i| dlt.storage_timestamp_ns(i))
+            .collect();
+        assert_eq!(timestamps, vec![
+            100 * 1_000_000_000,
+            300 * 1_000_000_000,
+            50 * 1_000_000_000,
+            200 * 1_000_000_000,
+        ]);
+    }
+
+    #[test]
+    fn is_empty_true_for_zero_messages() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty.dlt");
+        std::fs::File::create(&path).unwrap();
+
+        let (dlt, _) = Dlt::open(vec![path]).unwrap();
+        assert!(dlt.is_empty());
+    }
+
+    #[test]
+    fn is_empty_false_for_nonempty() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_v2_file(dir.path(), "one.dlt", &[
+            V2MessageBuilder::new().with_apid("APP1").build(),
+        ]);
+
+        let (dlt, _) = Dlt::open(vec![path]).unwrap();
+        assert!(!dlt.is_empty());
     }
 }
