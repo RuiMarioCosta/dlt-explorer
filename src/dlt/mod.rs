@@ -34,6 +34,7 @@ pub struct Dlt {
     message_timestamp_ns: Vec<u64>,
     message_type: Vec<u8>,
     log_level: Vec<u8>,
+    cnti: Vec<u8>,
     payload_loc: Vec<(u16, u32, u32)>, // (mmap_index, offset, len)
 }
 
@@ -53,6 +54,7 @@ impl Dlt {
         let mut message_timestamp_ns = Vec::new();
         let mut message_type = Vec::new();
         let mut log_level = Vec::new();
+        let mut cnti = Vec::new();
         let mut payload_loc = Vec::new();
         let mut all_errors = Vec::new();
 
@@ -98,6 +100,7 @@ impl Dlt {
                 message_timestamp_ns.push(hdr.message_timestamp_ns);
                 message_type.push(hdr.message_type);
                 log_level.push(hdr.log_level);
+                cnti.push(protocol::htyp2_cnti(hdr.htyp2));
 
                 let payload_offset_in_mmap = frame.msg_start + hdr.payload_offset;
                 payload_loc.push((
@@ -121,6 +124,7 @@ impl Dlt {
             message_timestamp_ns,
             message_type,
             log_level,
+            cnti,
             payload_loc,
         }, all_errors))
     }
@@ -168,6 +172,12 @@ impl Dlt {
     pub fn payload_raw(&self, row: usize) -> &[u8] {
         let (mmap_idx, offset, len) = self.payload_loc[row];
         &self.mmaps[mmap_idx as usize][offset as usize..(offset + len) as usize]
+    }
+
+    pub fn payload_text(&self, row: usize) -> String {
+        let raw = self.payload_raw(row);
+        let cnti = self.cnti[row];
+        payload::decode_payload(cnti, raw)
     }
 }
 
@@ -646,5 +656,26 @@ mod tests {
         let (dlt, errors) = Dlt::open(vec![path]).unwrap();
         assert_eq!(dlt.len(), 3);
         assert_eq!(errors.len(), 1);
+    }
+
+    #[test]
+    fn v2_payload_text_verbose_string() {
+        let msg_bytes = V2MessageBuilder::new()
+            .with_apid("APP1")
+            .with_ctid("CTX1")
+            .with_verbose_string("hello payload")
+            .build();
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("payload_text.dlt");
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            f.write_all(&msg_bytes).unwrap();
+        }
+
+        let (dlt, errors) = Dlt::open(vec![path]).unwrap();
+        assert_eq!(errors.len(), 0);
+        assert_eq!(dlt.len(), 1);
+        assert_eq!(dlt.payload_text(0), "hello payload");
     }
 }
