@@ -13,12 +13,32 @@ use anyhow::Result;
 use memmap2::Mmap;
 use std::fmt;
 use std::fs::File;
+use std::io::Read;
 use std::path::PathBuf;
 
 use error::{ParseError, ParseErrorKind};
 use framer::scan_frames;
 use header::parse_v2_header;
 use intern::InternTable;
+
+/// Detect the DLT protocol version from the first message in a file.
+///
+/// Reads the HTYP byte immediately after the v1 storage header (16 bytes)
+/// and extracts the version from bits 5-7.  Returns 1 for v1 files and
+/// 2 for v2 files.
+pub fn detect_version(path: &PathBuf) -> Result<u8> {
+    let mut file = File::open(path)?;
+    // v1 storage header: DLT\x01 (4) + seconds (4) + microseconds (4) + ECU (4) = 16
+    // The HTYP byte follows at offset 16.
+    let mut buf = [0u8; 17];
+    file.read_exact(&mut buf)?;
+    if &buf[0..4] != b"DLT\x01" {
+        anyhow::bail!("Not a DLT file: missing DLT\\x01 marker");
+    }
+    let htyp = buf[16];
+    let version = (htyp >> 5) & 0x07;
+    Ok(version)
+}
 
 /// DLT v2 parsed data in columnar (struct-of-arrays) layout.
 ///
@@ -231,7 +251,7 @@ pub mod test_helpers {
     /// Produces: storage header + base header + extension header + payload.
     pub struct V2MessageBuilder {
         storage_seconds: u32,
-        storage_nanoseconds: u32,
+        storage_microseconds: u32,
         storage_ecu: [u8; 4],
         apid: Option<[u8; 4]>,
         ctid: Option<[u8; 4]>,
@@ -249,7 +269,7 @@ pub mod test_helpers {
         pub fn new() -> Self {
             Self {
                 storage_seconds: 1000,
-                storage_nanoseconds: 500_000,
+                storage_microseconds: 500_000,
                 storage_ecu: *b"ECU1",
                 apid: None,
                 ctid: None,
@@ -269,9 +289,9 @@ pub mod test_helpers {
             self
         }
 
-        pub fn with_storage_timestamp(mut self, seconds: u32, nanoseconds: u32) -> Self {
+        pub fn with_storage_timestamp(mut self, seconds: u32, microseconds: u32) -> Self {
             self.storage_seconds = seconds;
-            self.storage_nanoseconds = nanoseconds;
+            self.storage_microseconds = microseconds;
             self
         }
 
@@ -357,11 +377,10 @@ pub mod test_helpers {
         pub fn build(self) -> Vec<u8> {
             let mut msg = Vec::new();
 
-            // --- Storage header (17 bytes) ---
+            // --- Storage header (16 bytes, per dlt-daemon DltStorageHeader) ---
             msg.extend_from_slice(b"DLT\x01");
             msg.extend_from_slice(&self.storage_seconds.to_le_bytes());
-            msg.extend_from_slice(&self.storage_nanoseconds.to_le_bytes());
-            msg.push(0x00); // flags
+            msg.extend_from_slice(&self.storage_microseconds.to_le_bytes());
             msg.extend_from_slice(&self.storage_ecu);
 
             // --- Build HTYP2 ---
@@ -492,7 +511,7 @@ mod tests {
         assert_eq!(dlt.ctid(0), "CTX1");
         assert_eq!(
             dlt.storage_timestamp_ns(0),
-            1000 * 1_000_000_000 + 500_000
+            1000 * 1_000_000_000 + 500_000 * 1_000
         );
         assert_eq!(dlt.message_timestamp_ns(0), ts_ns);
         assert_eq!(dlt.message_type(0), protocol::MESSAGE_TYPE_LOG);

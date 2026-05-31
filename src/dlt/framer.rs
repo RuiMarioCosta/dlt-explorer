@@ -39,13 +39,13 @@ pub fn scan_frames(data: &[u8], file_index: u16) -> (Vec<Frame>, Vec<ParseError>
             break;
         }
 
-        // Parse storage header TMSP2 (LE)
+        // Parse storage header fields (LE, per dlt-daemon DltStorageHeader)
         let seconds = u32::from_le_bytes(data[pos + 4..pos + 8].try_into().unwrap());
-        let nanoseconds = u32::from_le_bytes(data[pos + 8..pos + 12].try_into().unwrap());
+        let microseconds = u32::from_le_bytes(data[pos + 8..pos + 12].try_into().unwrap());
         let mut ecu = [0u8; 4];
-        ecu.copy_from_slice(&data[pos + 13..pos + 17]);
+        ecu.copy_from_slice(&data[pos + 12..pos + 16]);
 
-        let timestamp_ns = seconds as u64 * 1_000_000_000 + nanoseconds as u64;
+        let timestamp_ns = seconds as u64 * 1_000_000_000 + microseconds as u64 * 1_000;
 
         // Base header starts immediately after the storage header
         let msg_start = storage_end;
@@ -114,11 +114,10 @@ mod tests {
     fn minimal_v2_frame() -> Vec<u8> {
         let mut buf = Vec::new();
 
-        // Storage header
+        // Storage header (16 bytes)
         buf.extend_from_slice(b"DLT\x01");
         buf.extend_from_slice(&100u32.to_le_bytes()); // seconds
-        buf.extend_from_slice(&500u32.to_le_bytes()); // nanoseconds
-        buf.push(0); // flags
+        buf.extend_from_slice(&500u32.to_le_bytes()); // microseconds
         buf.extend_from_slice(b"ECU1"); // ECU ID
 
         // Base header: HTYP2 (verbose, VERS=2) + MCNT + LEN
@@ -139,18 +138,17 @@ mod tests {
         let (frames, errors) = scan_frames(&data, 0);
         assert_eq!(frames.len(), 1);
         assert_eq!(errors.len(), 0);
-        assert_eq!(frames[0].storage_timestamp_ns, 100 * 1_000_000_000 + 500);
+        assert_eq!(frames[0].storage_timestamp_ns, 100 * 1_000_000_000 + 500 * 1_000);
         assert_eq!(&frames[0].storage_ecu, b"ECU1");
     }
 
     #[test]
     fn skips_v1_frame() {
         let mut buf = Vec::new();
-        // Storage header (use v2 format for framing, but v1 base header)
+        // Storage header (16 bytes)
         buf.extend_from_slice(b"DLT\x01");
         buf.extend_from_slice(&0u32.to_le_bytes());
         buf.extend_from_slice(&0u32.to_le_bytes());
-        buf.push(0);
         buf.extend_from_slice(b"ECU1");
 
         // Base header with VERS=1
@@ -189,7 +187,6 @@ mod tests {
         buf.extend_from_slice(b"DLT\x01");
         buf.extend_from_slice(&0u32.to_le_bytes());
         buf.extend_from_slice(&0u32.to_le_bytes());
-        buf.push(0);
         buf.extend_from_slice(b"ECU1");
         // Only 3 bytes of base header instead of 7
         buf.extend_from_slice(&[0x00, 0x00, 0x00]);
@@ -207,7 +204,6 @@ mod tests {
         data.extend_from_slice(b"DLT\x01");
         data.extend_from_slice(&0u32.to_le_bytes());
         data.extend_from_slice(&0u32.to_le_bytes());
-        data.push(0);
         data.extend_from_slice(b"ECU1");
         let bad_htyp2 = build_htyp2(CNTI_VERBOSE, false, false, false, 3); // invalid version
         data.extend_from_slice(&bad_htyp2.to_be_bytes());
@@ -230,7 +226,6 @@ mod tests {
         buf.extend_from_slice(b"DLT\x01");
         buf.extend_from_slice(&0u32.to_le_bytes());
         buf.extend_from_slice(&0u32.to_le_bytes());
-        buf.push(0);
         buf.extend_from_slice(b"ECU1");
         let htyp2 = build_htyp2(CNTI_VERBOSE, false, false, false, PROTOCOL_VERSION_2);
         buf.extend_from_slice(&htyp2.to_be_bytes());
@@ -256,7 +251,6 @@ mod tests {
         buf.extend_from_slice(b"DLT\x01");
         buf.extend_from_slice(&100u32.to_le_bytes());
         buf.extend_from_slice(&0u32.to_le_bytes());
-        buf.push(0);
         buf.extend_from_slice(b"ECU1");
 
         let htyp2 = build_htyp2(CNTI_VERBOSE, false, false, false, PROTOCOL_VERSION_2);

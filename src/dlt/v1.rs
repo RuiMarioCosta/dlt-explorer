@@ -25,6 +25,7 @@ fn get_files_size(files: &[PathBuf]) -> u64 {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Dlt<'a> {
     paths: Vec<PathBuf>,
     filter: Option<PathBuf>,
@@ -395,7 +396,24 @@ impl<'a> Dlt<'a> {
 
 impl Display for Dlt<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}, {:?}, {}", self.paths, self.filter, self.size)
+        for i in 0..self.size {
+            let ecu = self.ecus[i].trim_end_matches('\0');
+            let apid = self.apids[i].trim_end_matches('\0');
+            let ctid = self.ctids[i].trim_end_matches('\0');
+            writeln!(
+                f,
+                "{}.{:06} {} {} {} {} {} {}",
+                self.seconds[i],
+                self.microseconds[i],
+                ecu,
+                apid,
+                ctid,
+                self.message_types[i],
+                self.log_infos[i],
+                self.payloads[i],
+            )?;
+        }
+        Ok(())
     }
 }
 

@@ -33,11 +33,31 @@ fn process_in_terminal(args: Cli) -> Result<()> {
         paths.sort();
     }
 
-    let (dlt, errors) = Dlt::open(paths)?;
-    if !errors.is_empty() {
-        eprintln!("{} parse error(s) encountered", errors.len());
+    let version = dlt::detect_version(&paths[0])?;
+    for path in &paths[1..] {
+        let v = dlt::detect_version(path)?;
+        if v != version {
+            return Err(anyhow!(
+                "Mixed DLT versions: first file is v{} but {:?} is v{}",
+                version,
+                path,
+                v
+            ));
+        }
     }
-    println!("{:?}", dlt);
+
+    println!("DLT Version: {}", version);
+
+    if version == 1 {
+        let dlt = dlt::v1::Dlt::from_files(paths, args.filter)?;
+        println!("{}", dlt);
+    } else {
+        let (dlt, errors) = Dlt::open(paths)?;
+        if !errors.is_empty() {
+            eprintln!("{} parse error(s) encountered", errors.len());
+        }
+        println!("{:?}", dlt);
+    }
 
     Ok(())
 }
