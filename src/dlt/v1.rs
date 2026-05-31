@@ -11,8 +11,8 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
 
-use super::dlt_common::*;
-use super::dlt_protocol::*;
+use super::payload::*;
+use super::protocol::*;
 
 const DLT_DELIMITER: &[u8] = b"DLT\x01";
 const BUFFER_SIZE: usize = 1 << 13; // 8 KiB
@@ -126,16 +126,16 @@ impl<'a> Dlt<'a> {
                     // Extra header
                     let mut seid: u32 = 0;
                     let mut tmsp: u32 = 0;
-                    let extra_header_size = dlt_standard_header_extra_size(htyp);
+                    let extra_header_size = standard_header_extra_size(htyp);
                     if extra_header_size != 0 {
-                        if dlt_is_htyp_weid(htyp) {
+                        if htyp_has_weid(htyp) {
                             ecu = String::from_utf8_lossy(&message[..DLT_ID_SIZE]).to_string();
                             message = &message[DLT_ID_SIZE..];
                         }
-                        if dlt_is_htyp_wsid(htyp) {
+                        if htyp_has_wsid(htyp) {
                             seid = message.read_u32::<NativeEndian>()?;
                         }
-                        if dlt_is_htyp_wtms(htyp) {
+                        if htyp_has_wtms(htyp) {
                             tmsp = message.read_u32::<NativeEndian>()?;
                         }
                     }
@@ -150,15 +150,15 @@ impl<'a> Dlt<'a> {
                     let mut ctid = String::new();
                     let mut message_type = "";
                     let mut log_info = "";
-                    if dlt_is_htyp_ueh(htyp) {
+                    if htyp_has_ueh(htyp) {
                         msin = message.read_u8()?;
                         noar = message.read_u8()?;
                         apid = String::from_utf8_lossy(&message[..DLT_ID_SIZE]).to_string();
                         message = &message[DLT_ID_SIZE..];
                         ctid = String::from_utf8_lossy(&message[..DLT_ID_SIZE]).to_string();
                         message = &message[DLT_ID_SIZE..];
-                        message_type = MESSAGE_TYPE[dlt_get_msin_mstp(msin) as usize];
-                        log_info = LOG_INFO[dlt_get_msin_mtin(msin) as usize];
+                        message_type = MESSAGE_TYPE[msin_mstp(msin) as usize];
+                        log_info = LOG_INFO[msin_mtin(msin) as usize];
                     }
                     msins.push(msin);
                     noars.push(noar);
@@ -171,10 +171,10 @@ impl<'a> Dlt<'a> {
                     let mut service_id_name = Cow::Borrowed("");
                     let mut return_type = "";
                     let mut payload = String::new();
-                    if dlt_msg_is_nonverbose(htyp, msin) {
+                    if msg_is_nonverbose(htyp, msin) {
                         let id = message.read_u32::<NativeEndian>()?;
 
-                        if dlt_msg_is_control(htyp, msin) {
+                        if msg_is_control(htyp, msin) {
                             if id < DLT_SERVICE_ID_LAST_ENTRY as u32 {
                                 service_id_name = Cow::Borrowed(SERVICE_ID_NAME[id as usize]);
                             } else {
@@ -184,7 +184,7 @@ impl<'a> Dlt<'a> {
                             write!(&mut payload, "{}", id)?;
                         }
 
-                        if dlt_msg_is_control_response(htyp, msin) {
+                        if msg_is_control_response(htyp, msin) {
                             let retval = message.read_u8()?;
                             return_type = RETURN_TYPE[retval as usize];
                         }
