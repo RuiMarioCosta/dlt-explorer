@@ -56,6 +56,27 @@ pub const HTYP2_WTGS: u32 = 1 << 17;
 pub const HTYP2_WPVL: u32 = 1 << 18;
 pub const HTYP2_WSGM: u32 = 1 << 19;
 
+// ---------------------------------------------------------------------------
+// MSIN byte layout (present for verbose and control messages)
+//   bit  0     reserved
+//   bits 1-3   MSTP  (Message Type)
+//   bits 4-7   MTIN  (Message Type Info — meaning depends on MSTP)
+// ---------------------------------------------------------------------------
+
+// MSTP values (Message Type)
+pub const MESSAGE_TYPE_LOG: u8 = 0x00;
+pub const MESSAGE_TYPE_TRACE: u8 = 0x01;
+pub const MESSAGE_TYPE_NETWORK: u8 = 0x02;
+pub const MESSAGE_TYPE_CONTROL: u8 = 0x03;
+
+// MTIN values when MSTP = LOG (Log Level)
+pub const LOG_LEVEL_FATAL: u8 = 0x01;
+pub const LOG_LEVEL_ERROR: u8 = 0x02;
+pub const LOG_LEVEL_WARN: u8 = 0x03;
+pub const LOG_LEVEL_INFO: u8 = 0x04;
+pub const LOG_LEVEL_DEBUG: u8 = 0x05;
+pub const LOG_LEVEL_VERBOSE: u8 = 0x06;
+
 #[inline]
 pub fn htyp2_cnti(htyp2: u32) -> u8 {
     ((htyp2 & HTYP2_CNTI_MASK) >> HTYP2_CNTI_SHIFT) as u8
@@ -81,6 +102,43 @@ pub fn htyp2_has_wsid(htyp2: u32) -> bool {
     htyp2 & HTYP2_WSID != 0
 }
 
+#[inline]
+pub fn htyp2_has_wsfln(htyp2: u32) -> bool {
+    htyp2 & HTYP2_WSFLN != 0
+}
+
+#[inline]
+pub fn htyp2_has_wtgs(htyp2: u32) -> bool {
+    htyp2 & HTYP2_WTGS != 0
+}
+
+#[inline]
+pub fn htyp2_has_wpvl(htyp2: u32) -> bool {
+    htyp2 & HTYP2_WPVL != 0
+}
+
+#[inline]
+pub fn htyp2_has_wsgm(htyp2: u32) -> bool {
+    htyp2 & HTYP2_WSGM != 0
+}
+
+// MSIN helpers
+#[inline]
+pub fn msin_mstp(msin: u8) -> u8 {
+    (msin >> 1) & 0x07
+}
+
+#[inline]
+pub fn msin_mtin(msin: u8) -> u8 {
+    (msin >> 4) & 0x0F
+}
+
+/// Build an MSIN byte from MSTP and MTIN fields.
+#[inline]
+pub fn build_msin(mstp: u8, mtin: u8) -> u8 {
+    ((mstp & 0x07) << 1) | ((mtin & 0x0F) << 4)
+}
+
 /// Build a HTYP2 u32 value from individual fields.
 pub fn build_htyp2(cnti: u8, weid: bool, wacid: bool, wsid: bool, vers: u8) -> u32 {
     let mut byte0: u8 = cnti & 0x03;
@@ -95,6 +153,59 @@ pub fn build_htyp2(cnti: u8, weid: bool, wacid: bool, wsid: bool, vers: u8) -> u
     }
     byte0 |= (vers & 0x07) << 5;
     (byte0 as u32) << 24
+}
+
+/// Build a HTYP2 u32 value with byte-1 flags included.
+pub fn build_htyp2_full(
+    cnti: u8,
+    weid: bool,
+    wacid: bool,
+    wsid: bool,
+    vers: u8,
+    wsfln: bool,
+    wtgs: bool,
+    wpvl: bool,
+    wsgm: bool,
+) -> u32 {
+    let mut val = build_htyp2(cnti, weid, wacid, wsid, vers);
+    if wsfln {
+        val |= HTYP2_WSFLN;
+    }
+    if wtgs {
+        val |= HTYP2_WTGS;
+    }
+    if wpvl {
+        val |= HTYP2_WPVL;
+    }
+    if wsgm {
+        val |= HTYP2_WSGM;
+    }
+    val
+}
+
+/// Encode a nanosecond timestamp into a 9-byte TMSP2 field (big-endian).
+pub fn encode_tmsp2(total_ns: u64) -> [u8; 9] {
+    let seconds = total_ns / 1_000_000_000;
+    let nanoseconds = (total_ns % 1_000_000_000) as u32;
+    let mut buf = [0u8; 9];
+    buf[0..4].copy_from_slice(&nanoseconds.to_be_bytes());
+    buf[4] = (seconds >> 32) as u8;
+    buf[5] = (seconds >> 24) as u8;
+    buf[6] = (seconds >> 16) as u8;
+    buf[7] = (seconds >> 8) as u8;
+    buf[8] = seconds as u8;
+    buf
+}
+
+/// Decode a 9-byte TMSP2 field into a nanosecond timestamp.
+pub fn decode_tmsp2(tmsp2: &[u8; 9]) -> u64 {
+    let nanoseconds = u32::from_be_bytes(tmsp2[0..4].try_into().unwrap()) & 0x7FFF_FFFF;
+    let seconds = ((tmsp2[4] as u64) << 32)
+        | ((tmsp2[5] as u64) << 24)
+        | ((tmsp2[6] as u64) << 16)
+        | ((tmsp2[7] as u64) << 8)
+        | (tmsp2[8] as u64);
+    seconds * 1_000_000_000 + nanoseconds as u64
 }
 
 #[cfg(test)]
@@ -148,5 +259,63 @@ mod tests {
         assert!(htyp2_has_wacid(htyp2));
         assert!(!htyp2_has_weid(htyp2));
         assert_eq!(htyp2_version(htyp2), PROTOCOL_VERSION_2);
+    }
+
+    #[test]
+    fn byte1_flag_extraction() {
+        let htyp2 = build_htyp2_full(
+            CNTI_VERBOSE, false, false, false, PROTOCOL_VERSION_2,
+            true, true, true, true,
+        );
+        assert!(htyp2_has_wsfln(htyp2));
+        assert!(htyp2_has_wtgs(htyp2));
+        assert!(htyp2_has_wpvl(htyp2));
+        assert!(htyp2_has_wsgm(htyp2));
+    }
+
+    #[test]
+    fn byte1_flags_cleared() {
+        let htyp2 = build_htyp2(CNTI_VERBOSE, false, false, false, PROTOCOL_VERSION_2);
+        assert!(!htyp2_has_wsfln(htyp2));
+        assert!(!htyp2_has_wtgs(htyp2));
+        assert!(!htyp2_has_wpvl(htyp2));
+        assert!(!htyp2_has_wsgm(htyp2));
+    }
+
+    #[test]
+    fn msin_roundtrip() {
+        let msin = build_msin(MESSAGE_TYPE_LOG, LOG_LEVEL_INFO);
+        assert_eq!(msin_mstp(msin), MESSAGE_TYPE_LOG);
+        assert_eq!(msin_mtin(msin), LOG_LEVEL_INFO);
+    }
+
+    #[test]
+    fn msin_all_types() {
+        for mstp in [MESSAGE_TYPE_LOG, MESSAGE_TYPE_TRACE, MESSAGE_TYPE_NETWORK, MESSAGE_TYPE_CONTROL] {
+            let msin = build_msin(mstp, 0);
+            assert_eq!(msin_mstp(msin), mstp);
+        }
+    }
+
+    #[test]
+    fn msin_log_levels() {
+        for mtin in [LOG_LEVEL_FATAL, LOG_LEVEL_ERROR, LOG_LEVEL_WARN,
+                     LOG_LEVEL_INFO, LOG_LEVEL_DEBUG, LOG_LEVEL_VERBOSE] {
+            let msin = build_msin(MESSAGE_TYPE_LOG, mtin);
+            assert_eq!(msin_mtin(msin), mtin);
+        }
+    }
+
+    #[test]
+    fn tmsp2_roundtrip() {
+        let ns = 1_700_000_000u64 * 1_000_000_000 + 123_456_789;
+        let encoded = encode_tmsp2(ns);
+        assert_eq!(decode_tmsp2(&encoded), ns);
+    }
+
+    #[test]
+    fn tmsp2_zero() {
+        let encoded = encode_tmsp2(0);
+        assert_eq!(decode_tmsp2(&encoded), 0);
     }
 }

@@ -8,6 +8,7 @@ target/
 
 # User spesific settings
 CMakeUserPresets.json
+progress.txt
 
 # IDE files
 .vs/
