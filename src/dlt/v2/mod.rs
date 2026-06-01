@@ -1,4 +1,3 @@
-pub mod error;
 mod framer;
 mod header;
 pub mod payload;
@@ -9,7 +8,7 @@ use std::fmt;
 use std::fs::File;
 use std::path::PathBuf;
 
-use error::{ParseError, ParseErrorKind};
+use crate::dlt::error::{ParseError, ParseErrorKind};
 use framer::scan_frames;
 use header::parse_v2_header;
 use super::intern::InternTable;
@@ -456,7 +455,7 @@ pub mod test_helpers {
 mod tests {
     use super::test_helpers::V2MessageBuilder;
     use super::*;
-    use error::ParseErrorKind;
+    use crate::dlt::error::ParseErrorKind;
     use std::io::Write;
 
     #[test]
