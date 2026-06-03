@@ -56,10 +56,11 @@ impl Dlt {
             // lifetime of the Dlt struct.
             let mmap = unsafe { Mmap::map(&file)? };
 
-            let (frames, frame_errors) = scan_frames(&mmap, file_idx as u16);
-            all_errors.extend(frame_errors);
+            let scan = scan_frames(&mmap, file_idx as u16);
+            all_errors.extend(scan.errors);
 
-            for frame in frames {
+            let mut next_override = 0usize;
+            for (frame_idx, frame) in scan.frames.into_iter().enumerate() {
                 let msg = &mmap[frame.msg_start..frame.msg_start + frame.msg_len];
 
                 let Some(hdr) = parse_v1_header(msg) else {
@@ -71,11 +72,34 @@ impl Dlt {
                     continue;
                 };
 
-                let ecu_str = match &hdr.ecu {
-                    Some(b) => std::str::from_utf8(b).unwrap_or(""),
+                let ecu_id = match &hdr.ecu {
+                    Some(b) => {
+                        let ecu_str = std::str::from_utf8(b).unwrap_or("");
+                        intern.insert(ecu_str.trim_end_matches('\0'))
+                    }
                     None => {
-                        // Fall back to storage header ECU
-                        std::str::from_utf8(&frame.storage_ecu).unwrap_or("")
+                        // Fall back to storage header ECU using sparse per-frame overrides.
+                        let storage_ecu = if next_override < scan.storage_ecu_overrides.len()
+                            && scan.storage_ecu_overrides[next_override].0 == frame_idx
+                        {
+                            let ecu = scan.storage_ecu_overrides[next_override].1;
+                            next_override += 1;
+                            Some(ecu)
+                        } else {
+                            scan.default_storage_ecu
+                        };
+
+                        let Some(storage_ecu) = storage_ecu else {
+                            all_errors.push(ParseError {
+                                file_index: file_idx as u16,
+                                byte_offset: frame.msg_start as u64,
+                                kind: ParseErrorKind::InvalidExtensionField,
+                            });
+                            continue;
+                        };
+
+                        let ecu_str = std::str::from_utf8(&storage_ecu).unwrap_or("");
+                        intern.insert(ecu_str.trim_end_matches('\0'))
                     }
                 };
                 let apid_str = match &hdr.apid {
@@ -88,13 +112,12 @@ impl Dlt {
                 };
 
                 // Trim null padding from interned strings
-                let ecu_trimmed = ecu_str.trim_end_matches('\0');
                 let apid_trimmed = apid_str.trim_end_matches('\0');
                 let ctid_trimmed = ctid_str.trim_end_matches('\0');
 
                 htyp.push(hdr.htyp);
                 msin.push(hdr.msin);
-                ecu.push(intern.insert(ecu_trimmed));
+                ecu.push(ecu_id);
                 apid.push(intern.insert(apid_trimmed));
                 ctid.push(intern.insert(ctid_trimmed));
                 session_id.push(hdr.session_id.unwrap_or(0));
@@ -224,6 +247,7 @@ impl fmt::Debug for Dlt {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
     use std::path::PathBuf;
 
     fn test_data_path(filename: &str) -> PathBuf {
@@ -339,6 +363,32 @@ mod tests {
         let (dlt, _) = Dlt::open(vec![path]).unwrap();
         // The file contains 100k rows
         assert_eq!(dlt.len(), 100_000);
+    }
+
+    #[test]
+    fn falls_back_to_storage_header_ecu_when_message_ecu_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v1_storage_ecu_fallback.dlt");
+        let mut file = std::fs::File::create(&path).unwrap();
+
+        let mut frame = Vec::new();
+        frame.extend_from_slice(b"DLT\x01");
+        frame.extend_from_slice(&1u32.to_le_bytes());
+        frame.extend_from_slice(&2u32.to_le_bytes());
+        frame.extend_from_slice(b"ECU1");
+
+        // HTYP version=1 only (no WEID), MCNT=0, LEN=4.
+        frame.push(1 << 5);
+        frame.push(0);
+        frame.extend_from_slice(&4u16.to_be_bytes());
+
+        file.write_all(&frame).unwrap();
+        file.flush().unwrap();
+
+        let (dlt, errors) = Dlt::open(vec![path]).unwrap();
+        assert!(errors.is_empty());
+        assert_eq!(dlt.len(), 1);
+        assert_eq!(dlt.ecu(0), "ECU1");
     }
 
     #[test]
