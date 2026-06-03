@@ -71,9 +71,7 @@ pub fn scan_frames(data: &[u8], file_index: u16) -> (Vec<Frame>, Vec<ParseError>
         }
 
         // LEN at bytes 2-3 of the standard header (big-endian)
-        let len = u16::from_be_bytes(
-            data[msg_start + 2..msg_start + 4].try_into().unwrap(),
-        );
+        let len = u16::from_be_bytes(data[msg_start + 2..msg_start + 4].try_into().unwrap());
 
         if (len as usize) < V1_STD_HEADER_MIN {
             errors.push(ParseError {
@@ -237,10 +235,10 @@ mod tests {
         let (frames, errors) = scan_frames(&buf, 0);
         assert_eq!(frames.len(), 0);
         assert_eq!(errors.len(), 1);
-        match &errors[0].kind {
-            ParseErrorKind::LengthMismatch { declared, .. } => assert_eq!(*declared, 500),
-            other => panic!("expected LengthMismatch, got {:?}", other),
-        }
+        assert!(matches!(
+            errors[0].kind,
+            ParseErrorKind::LengthMismatch { declared: 500, .. }
+        ));
     }
 
     #[test]
