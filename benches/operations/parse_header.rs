@@ -3,12 +3,12 @@ use dlt_explorer::dlt::v1::header::parse_v1_header;
 use dlt_explorer::dlt::v2::header::parse_v2_header;
 use std::hint::black_box;
 
-use super::fixtures::{SHARED_SCENARIOS, build_v1_dataset, build_v2_dataset};
+use super::fixtures::{build_v1_dataset, build_v2_dataset, scenarios_for_profile, BenchmarkProfile};
 
-pub fn bench(c: &mut Criterion) {
+pub fn bench(c: &mut Criterion, profile: BenchmarkProfile) {
     let mut group = c.benchmark_group("parse_header");
 
-    for spec in SHARED_SCENARIOS {
+    for &spec in scenarios_for_profile(profile) {
         let v1_data = build_v1_dataset(spec);
         let v2_data = build_v2_dataset(spec);
 

@@ -1,6 +1,41 @@
 use dlt_explorer::dlt::payload::{DLT_SCOD_UTF8, DLT_TYPE_INFO_STRG};
 use dlt_explorer::dlt::v2::test_helpers::V2MessageBuilder;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct BenchmarkSizes {
+    pub small: usize,
+    pub mixed: usize,
+    pub large: usize,
+}
+
+pub const BENCHMARK_SIZES: BenchmarkSizes = BenchmarkSizes {
+    small: 1_000,
+    mixed: 5_000,
+    large: 100_000,
+};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BenchmarkProfile {
+    Smoke,
+    Full,
+}
+
+impl BenchmarkProfile {
+    pub fn from_env() -> Self {
+        match std::env::var("DLT_BENCH_PROFILE")
+            .or_else(|_| std::env::var("BENCH_PROFILE"))
+            .ok()
+            .as_deref()
+        {
+            Some("smoke") => Self::Smoke,
+            Some("full") | None => Self::Full,
+            Some(other) => panic!(
+                "unsupported benchmark profile '{other}'; expected 'smoke' or 'full'"
+            ),
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct ScenarioSpec {
     pub name: &'static str,
@@ -13,47 +48,60 @@ pub struct ScenarioSpec {
 pub const SHARED_SCENARIOS: [ScenarioSpec; 6] = [
     ScenarioSpec {
         name: "uniform_ecu_small",
-        count: 1_000,
+        count: BENCHMARK_SIZES.small,
         mixed_every: 0,
         marker_in_payload: false,
         truncated_tail: false,
     },
     ScenarioSpec {
         name: "uniform_ecu_large",
-        count: 100_000,
+        count: BENCHMARK_SIZES.large,
         mixed_every: 0,
         marker_in_payload: false,
         truncated_tail: false,
     },
     ScenarioSpec {
         name: "sparse_mixed_ecu_large",
-        count: 100_000,
+        count: BENCHMARK_SIZES.large,
         mixed_every: 1_000,
         marker_in_payload: false,
         truncated_tail: false,
     },
     ScenarioSpec {
         name: "dense_mixed_ecu_large",
-        count: 100_000,
+        count: BENCHMARK_SIZES.large,
         mixed_every: 2,
         marker_in_payload: false,
         truncated_tail: false,
     },
     ScenarioSpec {
         name: "marker_in_payload",
-        count: 5_000,
+        count: BENCHMARK_SIZES.mixed,
         mixed_every: 0,
         marker_in_payload: true,
         truncated_tail: false,
     },
     ScenarioSpec {
         name: "truncated_tail",
-        count: 5_000,
+        count: BENCHMARK_SIZES.mixed,
         mixed_every: 0,
         marker_in_payload: false,
         truncated_tail: true,
     },
 ];
+
+pub const SMOKE_SCENARIOS: [ScenarioSpec; 3] = [
+    SHARED_SCENARIOS[0],
+    SHARED_SCENARIOS[4],
+    SHARED_SCENARIOS[5],
+];
+
+pub fn scenarios_for_profile(profile: BenchmarkProfile) -> &'static [ScenarioSpec] {
+    match profile {
+        BenchmarkProfile::Smoke => &SMOKE_SCENARIOS,
+        BenchmarkProfile::Full => &SHARED_SCENARIOS,
+    }
+}
 
 pub fn payload_text(spec: ScenarioSpec) -> &'static str {
     if spec.marker_in_payload {

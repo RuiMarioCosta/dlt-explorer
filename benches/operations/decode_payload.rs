@@ -4,12 +4,12 @@ use dlt_explorer::dlt::v1::payload as v1_payload;
 use dlt_explorer::dlt::v2::payload as v2_payload;
 use std::hint::black_box;
 
-use super::fixtures::{SHARED_SCENARIOS, build_v1_verbose_payload, payload_text};
+use super::fixtures::{build_v1_verbose_payload, payload_text, scenarios_for_profile, BenchmarkProfile};
 
-pub fn bench(c: &mut Criterion) {
+pub fn bench(c: &mut Criterion, profile: BenchmarkProfile) {
     let mut group = c.benchmark_group("decode_payload");
 
-    for spec in SHARED_SCENARIOS {
+    for &spec in scenarios_for_profile(profile) {
         let mut raw = build_v1_verbose_payload(payload_text(spec));
         if spec.truncated_tail && !raw.is_empty() {
             raw.pop();
