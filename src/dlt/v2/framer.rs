@@ -7,22 +7,32 @@ use crate::dlt::protocol::*;
 pub struct Frame {
     /// Nanosecond-resolution timestamp from the storage header.
     pub storage_timestamp_ns: u64,
-    /// ECU ID from the storage header (4 bytes, null-padded).
-    pub storage_ecu: [u8; 4],
     /// Byte offset of the base header start within the data slice.
     pub msg_start: usize,
     /// Message length from the base header LEN field.
     pub msg_len: usize,
 }
 
+/// Output of v2 frame scanning.
+pub struct ScanOutput {
+    pub frames: Vec<Frame>,
+    pub errors: Vec<ParseError>,
+    /// Default storage header ECU for this file.
+    pub default_storage_ecu: Option<[u8; 4]>,
+    /// Sparse per-frame storage ECU overrides: (frame_index, ecu).
+    pub storage_ecu_overrides: Vec<(usize, [u8; 4])>,
+}
+
 /// Scan `data` for DLT v2 frames, returning one `Frame` per valid v2 message
 /// found, plus any `ParseError`s for malformed frames encountered along the way.
 ///
 /// On error the scanner advances to the next `DLT\x01` marker.
-pub fn scan_frames(data: &[u8], file_index: u16) -> (Vec<Frame>, Vec<ParseError>) {
+pub fn scan_frames(data: &[u8], file_index: u16) -> ScanOutput {
     let finder = Finder::new(DLT_STORAGE_HEADER_PATTERN);
     let mut frames = Vec::new();
     let mut errors = Vec::new();
+    let mut default_storage_ecu = None;
+    let mut storage_ecu_overrides = Vec::new();
     let mut search_start = 0;
 
     while let Some(rel_pos) = finder.find(&data[search_start..]) {
@@ -94,16 +104,27 @@ pub fn scan_frames(data: &[u8], file_index: u16) -> (Vec<Frame>, Vec<ParseError>
 
         frames.push(Frame {
             storage_timestamp_ns: timestamp_ns,
-            storage_ecu: ecu,
             msg_start,
             msg_len: len as usize,
         });
+
+        let frame_idx = frames.len() - 1;
+        match default_storage_ecu {
+            None => default_storage_ecu = Some(ecu),
+            Some(default) if default != ecu => storage_ecu_overrides.push((frame_idx, ecu)),
+            _ => {}
+        }
 
         // Advance past this message
         search_start = msg_start + len as usize;
     }
 
-    (frames, errors)
+    ScanOutput {
+        frames,
+        errors,
+        default_storage_ecu,
+        storage_ecu_overrides,
+    }
 }
 
 #[cfg(test)]
@@ -135,11 +156,15 @@ mod tests {
     #[test]
     fn finds_single_v2_frame() {
         let data = minimal_v2_frame();
-        let (frames, errors) = scan_frames(&data, 0);
-        assert_eq!(frames.len(), 1);
-        assert_eq!(errors.len(), 0);
-        assert_eq!(frames[0].storage_timestamp_ns, 100 * 1_000_000_000 + 500 * 1_000);
-        assert_eq!(&frames[0].storage_ecu, b"ECU1");
+        let out = scan_frames(&data, 0);
+        assert_eq!(out.frames.len(), 1);
+        assert_eq!(out.errors.len(), 0);
+        assert_eq!(
+            out.frames[0].storage_timestamp_ns,
+            100 * 1_000_000_000 + 500 * 1_000
+        );
+        assert_eq!(out.default_storage_ecu, Some(*b"ECU1"));
+        assert!(out.storage_ecu_overrides.is_empty());
     }
 
     #[test]
@@ -159,25 +184,27 @@ mod tests {
         buf.push(0);
         buf.push(0);
 
-        let (frames, errors) = scan_frames(&buf, 0);
-        assert_eq!(frames.len(), 0);
-        assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].kind, ParseErrorKind::InvalidVersion { found: 1 });
+        let out = scan_frames(&buf, 0);
+        assert_eq!(out.frames.len(), 0);
+        assert_eq!(out.errors.len(), 1);
+        assert_eq!(out.errors[0].kind, ParseErrorKind::InvalidVersion { found: 1 });
     }
 
     #[test]
     fn empty_input() {
-        let (frames, errors) = scan_frames(&[], 0);
-        assert_eq!(frames.len(), 0);
-        assert_eq!(errors.len(), 0);
+        let out = scan_frames(&[], 0);
+        assert_eq!(out.frames.len(), 0);
+        assert_eq!(out.errors.len(), 0);
+        assert_eq!(out.default_storage_ecu, None);
+        assert!(out.storage_ecu_overrides.is_empty());
     }
 
     #[test]
     fn truncated_storage_header() {
-        let (frames, errors) = scan_frames(b"DLT\x01too_short", 0);
-        assert_eq!(frames.len(), 0);
-        assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].kind, ParseErrorKind::Truncated);
+        let out = scan_frames(b"DLT\x01too_short", 0);
+        assert_eq!(out.frames.len(), 0);
+        assert_eq!(out.errors.len(), 1);
+        assert_eq!(out.errors[0].kind, ParseErrorKind::Truncated);
     }
 
     #[test]
@@ -191,10 +218,10 @@ mod tests {
         // Only 3 bytes of base header instead of 7
         buf.extend_from_slice(&[0x00, 0x00, 0x00]);
 
-        let (frames, errors) = scan_frames(&buf, 0);
-        assert_eq!(frames.len(), 0);
-        assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].kind, ParseErrorKind::Truncated);
+        let out = scan_frames(&buf, 0);
+        assert_eq!(out.frames.len(), 0);
+        assert_eq!(out.errors.len(), 1);
+        assert_eq!(out.errors[0].kind, ParseErrorKind::Truncated);
     }
 
     #[test]
@@ -214,10 +241,11 @@ mod tests {
         // Second valid message
         data.extend_from_slice(&minimal_v2_frame());
 
-        let (frames, errors) = scan_frames(&data, 0);
-        assert_eq!(frames.len(), 2);
-        assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].kind, ParseErrorKind::InvalidVersion { found: 3 });
+        let out = scan_frames(&data, 0);
+        assert_eq!(out.frames.len(), 2);
+        assert_eq!(out.errors.len(), 1);
+        assert_eq!(out.errors[0].kind, ParseErrorKind::InvalidVersion { found: 3 });
+        assert_eq!(out.default_storage_ecu, Some(*b"ECU1"));
     }
 
     #[test]
@@ -235,10 +263,10 @@ mod tests {
         buf.push(0);
         buf.push(0);
 
-        let (frames, errors) = scan_frames(&buf, 0);
-        assert_eq!(frames.len(), 0);
-        assert_eq!(errors.len(), 1);
-        match &errors[0].kind {
+        let out = scan_frames(&buf, 0);
+        assert_eq!(out.frames.len(), 0);
+        assert_eq!(out.errors.len(), 1);
+        match &out.errors[0].kind {
             ParseErrorKind::LengthMismatch { declared, .. } => assert_eq!(*declared, 500),
             other => panic!("expected LengthMismatch, got {:?}", other),
         }
@@ -263,9 +291,9 @@ mod tests {
         buf.push(0); // NOAR
         buf.extend_from_slice(b"DLT\x01"); // fake marker in payload
 
-        let (frames, errors) = scan_frames(&buf, 0);
-        assert_eq!(frames.len(), 1);
-        assert_eq!(errors.len(), 0);
+        let out = scan_frames(&buf, 0);
+        assert_eq!(out.frames.len(), 1);
+        assert_eq!(out.errors.len(), 0);
     }
 
     #[test]
@@ -275,9 +303,26 @@ mod tests {
         data.extend_from_slice(b"DLT\x01");
         data.extend_from_slice(&[0u8; 5]); // not enough for full storage + base header
 
-        let (frames, errors) = scan_frames(&data, 0);
-        assert_eq!(frames.len(), 1);
-        assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].kind, ParseErrorKind::Truncated);
+        let out = scan_frames(&data, 0);
+        assert_eq!(out.frames.len(), 1);
+        assert_eq!(out.errors.len(), 1);
+        assert_eq!(out.errors[0].kind, ParseErrorKind::Truncated);
+    }
+
+    #[test]
+    fn mixed_storage_ecu_uses_sparse_overrides() {
+        let mut data = minimal_v2_frame();
+
+        let mut second = minimal_v2_frame();
+        second[12..16].copy_from_slice(b"ECU2");
+        data.extend_from_slice(&second);
+
+        data.extend_from_slice(&minimal_v2_frame());
+
+        let out = scan_frames(&data, 0);
+        assert_eq!(out.frames.len(), 3);
+        assert_eq!(out.default_storage_ecu, Some(*b"ECU1"));
+        assert_eq!(out.storage_ecu_overrides.len(), 1);
+        assert_eq!(out.storage_ecu_overrides[0], (1, *b"ECU2"));
     }
 }

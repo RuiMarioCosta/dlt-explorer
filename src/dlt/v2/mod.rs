@@ -1,4 +1,4 @@
-mod framer;
+pub mod framer;
 mod header;
 pub mod payload;
 
@@ -58,10 +58,10 @@ impl Dlt {
             // lifetime of the Dlt struct.
             let mmap = unsafe { Mmap::map(&file)? };
 
-            let (frames, frame_errors) = scan_frames(&mmap, file_idx as u16);
-            all_errors.extend(frame_errors);
+            let scan = scan_frames(&mmap, file_idx as u16);
+            all_errors.extend(scan.errors);
 
-            for frame in frames {
+            for frame in scan.frames {
                 let msg = &mmap[frame.msg_start..frame.msg_start + frame.msg_len];
 
                 let Some(hdr) = parse_v2_header(msg) else {
