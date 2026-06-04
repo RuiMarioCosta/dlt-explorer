@@ -63,6 +63,16 @@ impl Dlt {
             for (frame_idx, frame) in scan.frames.into_iter().enumerate() {
                 let msg = &mmap[frame.msg_start..frame.msg_start + frame.msg_len];
 
+                // Resolve this frame's storage ECU first so override cursor stays
+                // aligned even when message ECU is present and takes precedence.
+                let mut frame_storage_ecu = scan.default_storage_ecu;
+                if next_override < scan.storage_ecu_overrides.len()
+                    && scan.storage_ecu_overrides[next_override].0 == frame_idx
+                {
+                    frame_storage_ecu = Some(scan.storage_ecu_overrides[next_override].1);
+                    next_override += 1;
+                }
+
                 let Some(hdr) = parse_v1_header(msg) else {
                     all_errors.push(ParseError {
                         file_index: file_idx as u16,
@@ -78,18 +88,7 @@ impl Dlt {
                         intern.insert(ecu_str.trim_end_matches('\0'))
                     }
                     None => {
-                        // Fall back to storage header ECU using sparse per-frame overrides.
-                        let storage_ecu = if next_override < scan.storage_ecu_overrides.len()
-                            && scan.storage_ecu_overrides[next_override].0 == frame_idx
-                        {
-                            let ecu = scan.storage_ecu_overrides[next_override].1;
-                            next_override += 1;
-                            Some(ecu)
-                        } else {
-                            scan.default_storage_ecu
-                        };
-
-                        let Some(storage_ecu) = storage_ecu else {
+                        let Some(storage_ecu) = frame_storage_ecu else {
                             all_errors.push(ParseError {
                                 file_index: file_idx as u16,
                                 byte_offset: frame.msg_start as u64,
@@ -389,6 +388,64 @@ mod tests {
         assert!(errors.is_empty());
         assert_eq!(dlt.len(), 1);
         assert_eq!(dlt.ecu(0), "ECU1");
+    }
+
+    #[test]
+    fn storage_and_message_ecu_combinations_resolve_expected() {
+        fn write_v1_frame(
+            file: &mut std::fs::File,
+            seconds: u32,
+            storage_ecu: [u8; 4],
+            message_ecu: Option<[u8; 4]>,
+        ) {
+            let mut frame = Vec::new();
+            frame.extend_from_slice(b"DLT\x01");
+            frame.extend_from_slice(&seconds.to_le_bytes());
+            frame.extend_from_slice(&0u32.to_le_bytes());
+            frame.extend_from_slice(&storage_ecu);
+
+            let mut htyp = 1 << 5; // version = 1
+            if message_ecu.is_some() {
+                htyp |= 0x04; // WEID present
+            }
+            frame.push(htyp);
+            frame.push(0); // MCNT
+
+            let len: u16 = if message_ecu.is_some() { 8 } else { 4 };
+            frame.extend_from_slice(&len.to_be_bytes());
+            if let Some(ecu) = message_ecu {
+                frame.extend_from_slice(&ecu);
+            }
+
+            file.write_all(&frame).unwrap();
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v1_ecu_combinations.dlt");
+        let mut file = std::fs::File::create(&path).unwrap();
+
+        let cases: [([u8; 4], Option<[u8; 4]>, &str); 7] = [
+            (*b"ST01", None, "ST01"),
+            (*b"ST02", None, "ST02"),
+            (*b"ST03", Some(*b"MS03"), "MS03"),
+            (*b"ST01", Some(*b"MS04"), "MS04"),
+            (*b"ST02", Some(*b"MS05"), "MS05"),
+            (*b"ST03", None, "ST03"),
+            (*b"ST03", None, "ST03"),
+        ];
+
+        for (idx, (storage_ecu, message_ecu, _)) in cases.iter().enumerate() {
+            write_v1_frame(&mut file, idx as u32 + 1, *storage_ecu, *message_ecu);
+        }
+        file.flush().unwrap();
+
+        let (dlt, errors) = Dlt::open(vec![path]).unwrap();
+        assert!(errors.is_empty());
+        assert_eq!(dlt.len(), cases.len());
+
+        for (row, (_, _, expected)) in cases.iter().enumerate() {
+            assert_eq!(dlt.ecu(row), *expected);
+        }
     }
 
     #[test]

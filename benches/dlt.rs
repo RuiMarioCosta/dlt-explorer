@@ -93,6 +93,7 @@ fn bench_scan_frames(c: &mut Criterion) {
     let v2_sparse_mixed = generate_v2_scan_data(count, 1000);
 
     let mut group = c.benchmark_group("scan_frames_ecu");
+    group.sample_size(50);
     group.throughput(Throughput::Elements(count as u64));
 
     group.bench_function(BenchmarkId::new("v1_scan", "uniform_ecu"), |b| {
