@@ -1,0 +1,58 @@
+# Parity contract for shared v1/v2 scenarios.
+
+[[benchmark_pairs]]
+scenario = "scan_uniform_ecu"
+v1_benchmark = "v1_scan"
+v2_benchmark = "v2_scan"
+parameter = "uniform_ecu"
+
+[[benchmark_pairs]]
+scenario = "scan_sparse_mixed_ecu"
+v1_benchmark = "v1_scan"
+v2_benchmark = "v2_scan"
+parameter = "sparse_mixed_ecu"
+
+[[test_pairs]]
+scenario = "single_frame"
+v1_test_fn = "finds_single_v1_frame"
+v2_test_fn = "finds_single_v2_frame"
+
+[[test_pairs]]
+scenario = "empty_input"
+v1_test_fn = "empty_input"
+v2_test_fn = "empty_input"
+
+[[test_pairs]]
+scenario = "truncated_storage_header"
+v1_test_fn = "truncated_storage_header"
+v2_test_fn = "truncated_storage_header"
+
+[[test_pairs]]
+scenario = "truncated_mid_header"
+v1_test_fn = "truncated_mid_header"
+v2_test_fn = "truncated_mid_header_no_panic"
+
+[[test_pairs]]
+scenario = "version_mismatch"
+v1_test_fn = "wrong_version_resyncs"
+v2_test_fn = "skips_v1_frame"
+
+[[test_pairs]]
+scenario = "length_mismatch_declared_exceeds_available"
+v1_test_fn = "length_mismatch_declared_exceeds_available"
+v2_test_fn = "length_mismatch_declared_exceeds_available"
+
+[[test_pairs]]
+scenario = "marker_in_payload_not_confused_as_frame"
+v1_test_fn = "false_marker_in_payload_not_confused_as_frame"
+v2_test_fn = "marker_in_payload_not_confused_as_frame"
+
+[[test_pairs]]
+scenario = "file_ending_mid_message_after_valid"
+v1_test_fn = "file_ending_mid_message_after_valid"
+v2_test_fn = "file_ending_mid_message_after_valid"
+
+[[test_pairs]]
+scenario = "mixed_storage_ecu_sparse_overrides"
+v1_test_fn = "mixed_storage_ecu_uses_sparse_overrides"
+v2_test_fn = "mixed_storage_ecu_uses_sparse_overrides"

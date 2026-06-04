@@ -53,6 +53,14 @@ Run all tests:
 cargo test
 ```
 
+Run only the parity contract validator (checks required v1/v2 benchmark and test pairs):
+
+```bash
+cargo test parity_manifest_contract_is_satisfied
+```
+
+Edit [parity_manifest.toml](parity_manifest.toml) to add or update required shared scenarios.
+
 Run benchmarks:
 
 ```bash
