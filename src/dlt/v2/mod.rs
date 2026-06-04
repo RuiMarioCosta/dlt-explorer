@@ -1,6 +1,6 @@
-pub mod framer;
-pub mod header;
-pub mod payload;
+mod framer;
+mod header;
+mod payload;
 
 use anyhow::Result;
 use memmap2::Mmap;
@@ -8,7 +8,7 @@ use std::fmt;
 use std::fs::File;
 use std::path::PathBuf;
 
-use crate::dlt::error::{ParseError, ParseErrorKind};
+use crate::dlt::error::ParseError;
 use framer::scan_frames;
 use header::parse_v2_header;
 use super::intern::InternTable;
@@ -64,13 +64,16 @@ impl Dlt {
             for frame in scan.frames {
                 let msg = &mmap[frame.msg_start..frame.msg_start + frame.msg_len];
 
-                let Some(hdr) = parse_v2_header(msg) else {
-                    all_errors.push(ParseError {
-                        file_index: file_idx as u16,
-                        byte_offset: frame.msg_start as u64,
-                        kind: ParseErrorKind::InvalidExtensionField,
-                    });
-                    continue;
+                let hdr = match parse_v2_header(msg) {
+                    Ok(hdr) => hdr,
+                    Err(kind) => {
+                        all_errors.push(ParseError {
+                            file_index: file_idx as u16,
+                            byte_offset: frame.msg_start as u64,
+                            kind,
+                        });
+                        continue;
+                    }
                 };
 
                 let apid_str = match &hdr.apid {

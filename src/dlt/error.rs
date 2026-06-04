@@ -16,6 +16,8 @@ pub enum ParseErrorKind {
     Truncated,
     /// Base header version field is not the expected version.
     InvalidVersion { found: u8 },
+    /// Standard header fields/flags are inconsistent or malformed.
+    InvalidStandardHeader,
     /// Declared message length does not match available data.
     LengthMismatch { declared: u16, available: usize },
     /// An extension header field could not be parsed.
