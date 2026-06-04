@@ -67,6 +67,8 @@ Run benchmarks:
 cargo bench
 ```
 
+Benchmark parity naming is frozen and documented in [docs/benchmark-parity.md](docs/benchmark-parity.md).
+
 ## License
 
 This project is licensed under the MIT License. See `LICENSE` for details.

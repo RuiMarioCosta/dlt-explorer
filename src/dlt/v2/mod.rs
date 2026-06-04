@@ -1,5 +1,5 @@
 pub mod framer;
-mod header;
+pub mod header;
 pub mod payload;
 
 use anyhow::Result;
