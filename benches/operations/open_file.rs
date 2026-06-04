@@ -3,13 +3,13 @@ use dlt_explorer::dlt::v1::Dlt as V1Dlt;
 use dlt_explorer::dlt::v2::Dlt as V2Dlt;
 use std::fs;
 
-use super::fixtures::{SHARED_SCENARIOS, build_v1_dataset, build_v2_dataset};
+use super::fixtures::{build_v1_dataset, build_v2_dataset, scenarios_for_profile, BenchmarkProfile};
 
-pub fn bench(c: &mut Criterion) {
+pub fn bench(c: &mut Criterion, profile: BenchmarkProfile) {
     let tempdir = tempfile::tempdir().expect("create open_file tempdir");
     let mut group = c.benchmark_group("open_file");
 
-    for spec in SHARED_SCENARIOS {
+    for &spec in scenarios_for_profile(profile) {
         let v1_data = build_v1_dataset(spec);
         let v2_data = build_v2_dataset(spec);
 

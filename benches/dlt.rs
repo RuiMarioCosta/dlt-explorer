@@ -1,12 +1,15 @@
 mod operations;
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use operations::fixtures::BenchmarkProfile;
 
 fn bench_operations(c: &mut Criterion) {
-    operations::scan_frames::bench(c);
-    operations::parse_header::bench(c);
-    operations::decode_payload::bench(c);
-    operations::open_file::bench(c);
+    let profile = BenchmarkProfile::from_env();
+
+    operations::scan_frames::bench(c, profile);
+    operations::parse_header::bench(c, profile);
+    operations::decode_payload::bench(c, profile);
+    operations::open_file::bench(c, profile);
 }
 
 criterion_group!(benches, bench_operations);
