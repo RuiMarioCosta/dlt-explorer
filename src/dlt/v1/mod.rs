@@ -1,6 +1,7 @@
 mod framer;
 mod header;
 mod payload;
+mod protocol;
 
 use anyhow::Result;
 use memmap2::Mmap;
@@ -10,9 +11,9 @@ use std::path::PathBuf;
 
 use crate::dlt::error::{ParseError, ParseErrorKind};
 use crate::dlt::intern::InternTable;
-use crate::dlt::protocol::{msin_mstp, msin_mtin};
 use framer::scan_frames;
 use header::parse_v1_header;
+use protocol::{msin_mstp, msin_mtin};
 
 /// DLT v1 parsed data in columnar (struct-of-arrays) layout.
 ///
@@ -65,11 +66,11 @@ impl Dlt {
 
                 // Resolve this frame's storage ECU first so override cursor stays
                 // aligned even when message ECU is present and takes precedence.
-                let mut frame_storage_ecu = scan.default_storage_ecu;
+                let mut storage_ecu = scan.default_storage_ecu;
                 if next_override < scan.storage_ecu_overrides.len()
                     && scan.storage_ecu_overrides[next_override].0 == frame_idx
                 {
-                    frame_storage_ecu = Some(scan.storage_ecu_overrides[next_override].1);
+                    storage_ecu = Some(scan.storage_ecu_overrides[next_override].1);
                     next_override += 1;
                 }
 
@@ -91,7 +92,7 @@ impl Dlt {
                         intern.insert(ecu_str.trim_end_matches('\0'))
                     }
                     None => {
-                        let Some(storage_ecu) = frame_storage_ecu else {
+                        let Some(storage_ecu) = storage_ecu else {
                             all_errors.push(ParseError {
                                 file_index: file_idx as u16,
                                 byte_offset: frame.msg_start as u64,
@@ -104,24 +105,26 @@ impl Dlt {
                         intern.insert(ecu_str.trim_end_matches('\0'))
                     }
                 };
-                let apid_str = match &hdr.apid {
-                    Some(b) => std::str::from_utf8(b).unwrap_or(""),
-                    None => "",
+                let apid_id = match &hdr.apid {
+                    Some(b) => {
+                        let apid_str = std::str::from_utf8(b).unwrap_or("");
+                        intern.insert(apid_str.trim_end_matches('\0'))
+                    }
+                    None => intern.insert(""),
                 };
-                let ctid_str = match &hdr.ctid {
-                    Some(b) => std::str::from_utf8(b).unwrap_or(""),
-                    None => "",
+                let ctid_id = match &hdr.ctid {
+                    Some(b) => {
+                        let ctid_str = std::str::from_utf8(b).unwrap_or("");
+                        intern.insert(ctid_str.trim_end_matches('\0'))
+                    }
+                    None => intern.insert(""),
                 };
-
-                // Trim null padding from interned strings
-                let apid_trimmed = apid_str.trim_end_matches('\0');
-                let ctid_trimmed = ctid_str.trim_end_matches('\0');
 
                 htyp.push(hdr.htyp);
                 msin.push(hdr.msin);
                 ecu.push(ecu_id);
-                apid.push(intern.insert(apid_trimmed));
-                ctid.push(intern.insert(ctid_trimmed));
+                apid.push(apid_id);
+                ctid.push(ctid_id);
                 session_id.push(hdr.session_id.unwrap_or(0));
                 storage_timestamp_ns.push(frame.storage_timestamp_ns);
                 message_timestamp_ns.push(hdr.message_timestamp_ns);

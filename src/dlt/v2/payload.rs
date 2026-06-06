@@ -1,5 +1,5 @@
+use super::protocol::{CNTI_CONTROL, CNTI_NON_VERBOSE, CNTI_VERBOSE};
 use crate::dlt::payload;
-use crate::dlt::protocol::{CNTI_CONTROL, CNTI_NON_VERBOSE, CNTI_VERBOSE};
 
 /// Decode a payload slice into a human-readable string based on content type.
 ///

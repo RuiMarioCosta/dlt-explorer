@@ -1,5 +1,5 @@
+use super::protocol::{MESSAGE_TYPE_CONTROL, htyp_has_msbf, htyp_has_ueh, msin_is_verb, msin_mstp};
 use crate::dlt::payload;
-use crate::dlt::protocol::{htyp_has_msbf, htyp_has_ueh, msin_is_verb, msin_mstp, MESSAGE_TYPE_CONTROL};
 
 /// Decode a v1 payload slice into a human-readable string.
 ///

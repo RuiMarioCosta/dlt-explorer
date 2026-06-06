@@ -1,5 +1,5 @@
+use super::protocol::*;
 use crate::dlt::error::ParseErrorKind;
-use crate::dlt::protocol::*;
 
 /// Parsed v1 header information.
 pub struct ParsedHeader {
@@ -18,41 +18,35 @@ pub struct ParsedHeader {
     pub payload_len: usize,
 }
 
-/// v1 standard header minimum size: HTYP(1) + MCNT(1) + LEN(2) = 4
-const V1_STD_HEADER_MIN: usize = 4;
-
-/// v1 extended header size: MSIN(1) + NOAR(1) + APID(4) + CTID(4) = 10
-const V1_EXT_HEADER_SIZE: usize = 10;
-
 /// Parse a v1 header from a message slice.
 ///
 /// `msg` starts at the standard header (HTYP byte) and has the full message length.
 /// Returns a specific `ParseErrorKind` when the message is malformed.
 pub(super) fn parse_v1_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind> {
-    debug_assert!(msg.len() >= V1_STD_HEADER_MIN);
+    debug_assert!(msg.len() >= STD_HEADER_MIN);
 
     let htyp = msg[0];
     let len = msg.len();
-    let mut offset: usize = V1_STD_HEADER_MIN;
+    let mut offset: usize = STD_HEADER_MIN;
 
     // Optional fields based on HTYP flags
     let ecu = if htyp_has_weid(htyp) {
-        if offset + DLT_SIZE_WEID > len {
+        if offset + SIZE_WEID > len {
             return Err(ParseErrorKind::InvalidStandardHeader);
         }
-        let val: [u8; 4] = msg[offset..offset + 4].try_into().unwrap();
-        offset += DLT_SIZE_WEID;
+        let val: [u8; SIZE_WEID] = msg[offset..offset + SIZE_WEID].try_into().unwrap();
+        offset += SIZE_WEID;
         Some(val)
     } else {
         None
     };
 
     let session_id = if htyp_has_wsid(htyp) {
-        if offset + DLT_SIZE_WSID > len {
+        if offset + SIZE_WSID > len {
             return Err(ParseErrorKind::InvalidStandardHeader);
         }
-        let val = u32::from_be_bytes(msg[offset..offset + 4].try_into().unwrap());
-        offset += DLT_SIZE_WSID;
+        let val = u32::from_be_bytes(msg[offset..offset + SIZE_WSID].try_into().unwrap());
+        offset += SIZE_WSID;
         Some(val)
     } else {
         None
@@ -60,11 +54,11 @@ pub(super) fn parse_v1_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind
 
     // Timestamp: 0.1ms ticks (u32) -> convert to nanoseconds (* 100_000)
     let message_timestamp_ns = if htyp_has_wtms(htyp) {
-        if offset + DLT_SIZE_WTMS > len {
+        if offset + SIZE_WTMS > len {
             return Err(ParseErrorKind::InvalidStandardHeader);
         }
-        let ticks = u32::from_be_bytes(msg[offset..offset + 4].try_into().unwrap());
-        offset += DLT_SIZE_WTMS;
+        let ticks = u32::from_be_bytes(msg[offset..offset + SIZE_WTMS].try_into().unwrap());
+        offset += SIZE_WTMS;
         (ticks as u64) * 100_000
     } else {
         0
@@ -78,7 +72,7 @@ pub(super) fn parse_v1_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind
     let mut msin_byte: u8 = 0;
 
     if htyp_has_ueh(htyp) {
-        if offset + V1_EXT_HEADER_SIZE > len {
+        if offset + EXT_HEADER_SIZE > len {
             return Err(ParseErrorKind::InvalidExtensionField);
         }
         msin_byte = msg[offset];
@@ -87,12 +81,12 @@ pub(super) fn parse_v1_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind
         log_level = msin_mtin(msin_byte);
 
         let apid_start = offset + 2;
-        apid = Some(msg[apid_start..apid_start + 4].try_into().unwrap());
+        apid = Some(msg[apid_start..apid_start + SIZE_APID].try_into().unwrap());
 
-        let ctid_start = apid_start + 4;
-        ctid = Some(msg[ctid_start..ctid_start + 4].try_into().unwrap());
+        let ctid_start = apid_start + SIZE_APID;
+        ctid = Some(msg[ctid_start..ctid_start + SIZE_CTID].try_into().unwrap());
 
-        offset += V1_EXT_HEADER_SIZE;
+        offset += EXT_HEADER_SIZE;
     }
 
     let payload_offset = offset;
@@ -118,13 +112,7 @@ mod tests {
     use super::*;
 
     /// Helper to build a v1 message with the given flags and optional fields.
-    fn build_v1_msg(
-        ueh: bool,
-        weid: bool,
-        wsid: bool,
-        wtms: bool,
-        payload: &[u8],
-    ) -> Vec<u8> {
+    fn build_v1_msg(ueh: bool, weid: bool, wsid: bool, wtms: bool, payload: &[u8]) -> Vec<u8> {
         let mut htyp: u8 = 1 << 5; // version = 1
         if ueh {
             htyp |= 0x01;

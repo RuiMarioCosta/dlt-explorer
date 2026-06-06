@@ -1,7 +1,7 @@
-use memchr::memmem::Finder;
-
+use super::protocol::*;
 use crate::dlt::error::{ParseError, ParseErrorKind};
-use crate::dlt::protocol::*;
+use crate::dlt::storage::*;
+use memchr::memmem::Finder;
 
 /// A located DLT v2 frame within memory-mapped data.
 pub struct Frame {
@@ -28,7 +28,7 @@ pub struct ScanOutput {
 ///
 /// On error the scanner advances to the next `DLT\x01` marker.
 pub fn scan_frames(data: &[u8], file_index: u16) -> ScanOutput {
-    let finder = Finder::new(DLT_STORAGE_HEADER_PATTERN);
+    let finder = Finder::new(STORAGE_HEADER_PATTERN);
     let mut frames = Vec::new();
     let mut errors = Vec::new();
     let mut default_storage_ecu = None;
@@ -73,8 +73,7 @@ pub fn scan_frames(data: &[u8], file_index: u16) -> ScanOutput {
             continue;
         }
 
-        let len =
-            u16::from_be_bytes(data[msg_start + 5..msg_start + 7].try_into().unwrap());
+        let len = u16::from_be_bytes(data[msg_start + 5..msg_start + 7].try_into().unwrap());
 
         if (len as usize) < BASE_HEADER_MIN_SIZE {
             errors.push(ParseError {
@@ -187,7 +186,10 @@ mod tests {
         let out = scan_frames(&buf, 0);
         assert_eq!(out.frames.len(), 0);
         assert_eq!(out.errors.len(), 1);
-        assert_eq!(out.errors[0].kind, ParseErrorKind::InvalidVersion { found: 1 });
+        assert_eq!(
+            out.errors[0].kind,
+            ParseErrorKind::InvalidVersion { found: 1 }
+        );
     }
 
     #[test]
@@ -244,7 +246,10 @@ mod tests {
         let out = scan_frames(&data, 0);
         assert_eq!(out.frames.len(), 2);
         assert_eq!(out.errors.len(), 1);
-        assert_eq!(out.errors[0].kind, ParseErrorKind::InvalidVersion { found: 3 });
+        assert_eq!(
+            out.errors[0].kind,
+            ParseErrorKind::InvalidVersion { found: 3 }
+        );
         assert_eq!(out.default_storage_ecu, Some(*b"ECU1"));
     }
 

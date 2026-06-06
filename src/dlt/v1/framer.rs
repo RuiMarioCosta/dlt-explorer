@@ -1,10 +1,7 @@
-use memchr::memmem::Finder;
-
+use super::protocol::STD_HEADER_MIN;
 use crate::dlt::error::{ParseError, ParseErrorKind};
-use crate::dlt::protocol::*;
-
-/// v1 standard header minimum size: HTYP(1) + MCNT(1) + LEN(2) = 4
-const V1_STD_HEADER_MIN: usize = 4;
+use crate::dlt::storage::*;
+use memchr::memmem::Finder;
 
 /// A located DLT v1 frame within memory-mapped data.
 pub struct Frame {
@@ -35,7 +32,7 @@ pub struct ScanOutput {
 ///
 /// On error the scanner resyncs to the next `DLT\x01` marker.
 pub fn scan_frames(data: &[u8], file_index: u16) -> ScanOutput {
-    let finder = Finder::new(DLT_STORAGE_HEADER_PATTERN);
+    let finder = Finder::new(STORAGE_HEADER_PATTERN);
     let mut frames = Vec::new();
     let mut errors = Vec::new();
     let mut default_storage_ecu = None;
@@ -47,7 +44,7 @@ pub fn scan_frames(data: &[u8], file_index: u16) -> ScanOutput {
         let storage_end = pos + STORAGE_HEADER_SIZE;
 
         // Need at least the storage header + v1 standard header minimum
-        if storage_end + V1_STD_HEADER_MIN > data.len() {
+        if storage_end + STD_HEADER_MIN > data.len() {
             errors.push(ParseError {
                 file_index,
                 byte_offset: pos as u64,
@@ -83,7 +80,7 @@ pub fn scan_frames(data: &[u8], file_index: u16) -> ScanOutput {
         // LEN at bytes 2-3 of the standard header (big-endian)
         let len = u16::from_be_bytes(data[msg_start + 2..msg_start + 4].try_into().unwrap());
 
-        if (len as usize) < V1_STD_HEADER_MIN {
+        if (len as usize) < STD_HEADER_MIN {
             errors.push(ParseError {
                 file_index,
                 byte_offset: pos as u64,
@@ -242,7 +239,10 @@ mod tests {
         let out = scan_frames(&buf, 0);
         assert_eq!(out.frames.len(), 1);
         assert_eq!(out.errors.len(), 1);
-        assert_eq!(out.errors[0].kind, ParseErrorKind::InvalidVersion { found: 2 });
+        assert_eq!(
+            out.errors[0].kind,
+            ParseErrorKind::InvalidVersion { found: 2 }
+        );
         assert_eq!(out.default_storage_ecu, Some(*b"ECU1"));
     }
 
