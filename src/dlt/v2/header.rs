@@ -1,5 +1,5 @@
+use super::protocol::*;
 use crate::dlt::error::ParseErrorKind;
-use crate::dlt::protocol::*;
 
 /// Parsed v2 header information.
 pub struct ParsedHeader {
@@ -132,7 +132,9 @@ pub(super) fn parse_v2_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind
         if offset + 4 > msg.len() {
             return Err(ParseErrorKind::InvalidExtensionField);
         }
-        session_id = Some(u32::from_be_bytes(msg[offset..offset + 4].try_into().unwrap()));
+        session_id = Some(u32::from_be_bytes(
+            msg[offset..offset + 4].try_into().unwrap(),
+        ));
         offset += 4;
     }
 
@@ -218,7 +220,7 @@ mod tests {
         let len_pos = msg.len();
         msg.extend_from_slice(&0u16.to_be_bytes()); // placeholder
 
-        msg.push(build_msin(MESSAGE_TYPE_LOG, LOG_LEVEL_INFO)); // MSIN
+        msg.push(build_msin(MESSAGE_TYPE_LOG, LOG_INFO)); // MSIN
         msg.push(1); // NOAR = 1
 
         // TMSP2 (9 bytes)
@@ -244,7 +246,7 @@ mod tests {
         assert_eq!(header.apid, Some(*b"APP1"));
         assert_eq!(header.ctid, Some(*b"CTX1"));
         assert_eq!(header.message_type, MESSAGE_TYPE_LOG);
-        assert_eq!(header.log_level, LOG_LEVEL_INFO);
+        assert_eq!(header.log_level, LOG_INFO);
         assert_eq!(header.message_timestamp_ns, ts_ns);
         assert_eq!(header.payload_len, 4);
 
@@ -255,7 +257,11 @@ mod tests {
     #[test]
     fn parse_all_extension_fields_present() {
         let htyp2 = build_htyp2_full(
-            CNTI_VERBOSE, true, true, true, PROTOCOL_VERSION_2,
+            CNTI_VERBOSE,
+            true,
+            true,
+            true,
+            PROTOCOL_VERSION_2,
             true,  // WSFLN
             true,  // WTGS
             true,  // WPVL
@@ -268,7 +274,7 @@ mod tests {
         let len_pos = msg.len();
         msg.extend_from_slice(&0u16.to_be_bytes()); // placeholder LEN
 
-        msg.push(build_msin(MESSAGE_TYPE_TRACE, LOG_LEVEL_WARN)); // MSIN
+        msg.push(build_msin(MESSAGE_TYPE_TRACE, LOG_WARN)); // MSIN
         msg.push(0); // NOAR
 
         let ts_ns = 42u64 * 1_000_000_000 + 999_999_999;
@@ -314,7 +320,7 @@ mod tests {
         assert_eq!(header.session_id, Some(0x12345678));
         assert_eq!(header.message_timestamp_ns, ts_ns);
         assert_eq!(header.message_type, MESSAGE_TYPE_TRACE);
-        assert_eq!(header.log_level, LOG_LEVEL_WARN);
+        assert_eq!(header.log_level, LOG_WARN);
         assert_eq!(header.privacy_level, Some(7));
         assert_eq!(header.payload_len, 1);
     }
@@ -329,7 +335,7 @@ mod tests {
         let len_pos = msg.len();
         msg.extend_from_slice(&0u16.to_be_bytes());
 
-        msg.push(build_msin(MESSAGE_TYPE_LOG, LOG_LEVEL_DEBUG));
+        msg.push(build_msin(MESSAGE_TYPE_LOG, LOG_DEBUG));
         msg.push(0); // NOAR
 
         msg.extend_from_slice(&encode_tmsp2(0)); // TMSP2
@@ -344,7 +350,7 @@ mod tests {
         assert_eq!(header.session_id, None);
         assert_eq!(header.privacy_level, None);
         assert_eq!(header.message_type, MESSAGE_TYPE_LOG);
-        assert_eq!(header.log_level, LOG_LEVEL_DEBUG);
+        assert_eq!(header.log_level, LOG_DEBUG);
     }
 
     #[test]
@@ -352,8 +358,15 @@ mod tests {
         // Simulate a future extension by appending extra bytes after WPVL
         // but before payload. The parser should treat them as payload.
         let htyp2 = build_htyp2_full(
-            CNTI_VERBOSE, false, false, false, PROTOCOL_VERSION_2,
-            false, false, true, false, // only WPVL
+            CNTI_VERBOSE,
+            false,
+            false,
+            false,
+            PROTOCOL_VERSION_2,
+            false,
+            false,
+            true,
+            false, // only WPVL
         );
 
         let mut msg = Vec::new();
@@ -362,7 +375,7 @@ mod tests {
         let len_pos = msg.len();
         msg.extend_from_slice(&0u16.to_be_bytes());
 
-        msg.push(build_msin(MESSAGE_TYPE_LOG, LOG_LEVEL_INFO));
+        msg.push(build_msin(MESSAGE_TYPE_LOG, LOG_INFO));
         msg.push(0);
         msg.extend_from_slice(&encode_tmsp2(0));
 
@@ -410,12 +423,12 @@ mod tests {
     #[test]
     fn log_levels_from_msin() {
         for (mtin, label) in [
-            (LOG_LEVEL_FATAL, "FATAL"),
-            (LOG_LEVEL_ERROR, "ERROR"),
-            (LOG_LEVEL_WARN, "WARN"),
-            (LOG_LEVEL_INFO, "INFO"),
-            (LOG_LEVEL_DEBUG, "DEBUG"),
-            (LOG_LEVEL_VERBOSE, "VERBOSE"),
+            (LOG_FATAL, "FATAL"),
+            (LOG_ERROR, "ERROR"),
+            (LOG_WARN, "WARN"),
+            (LOG_INFO, "INFO"),
+            (LOG_DEBUG, "DEBUG"),
+            (LOG_VERBOSE, "VERBOSE"),
         ] {
             let htyp2 = build_htyp2(CNTI_VERBOSE, false, false, false, PROTOCOL_VERSION_2);
             let mut msg = Vec::new();

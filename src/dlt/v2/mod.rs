@@ -1,6 +1,7 @@
 mod framer;
 mod header;
 mod payload;
+mod protocol;
 
 use anyhow::Result;
 use memmap2::Mmap;
@@ -8,11 +9,11 @@ use std::fmt;
 use std::fs::File;
 use std::path::PathBuf;
 
+use super::intern::InternTable;
 use crate::dlt::error::ParseError;
 use framer::scan_frames;
 use header::parse_v2_header;
-use super::intern::InternTable;
-use super::protocol;
+use protocol::htyp2_cnti;
 
 /// DLT v2 parsed data in columnar (struct-of-arrays) layout.
 ///
@@ -97,7 +98,7 @@ impl Dlt {
                 message_timestamp_ns.push(hdr.message_timestamp_ns);
                 message_type.push(hdr.message_type);
                 log_level.push(hdr.log_level);
-                cnti.push(protocol::htyp2_cnti(hdr.htyp2));
+                cnti.push(htyp2_cnti(hdr.htyp2));
 
                 let payload_offset_in_mmap = frame.msg_start + hdr.payload_offset;
                 payload_loc.push((
@@ -110,20 +111,23 @@ impl Dlt {
             mmaps.push(mmap);
         }
 
-        Ok((Dlt {
-            mmaps,
-            intern,
-            apid,
-            ctid,
-            ecu,
-            session_id,
-            storage_timestamp_ns,
-            message_timestamp_ns,
-            message_type,
-            log_level,
-            cnti,
-            payload_loc,
-        }, all_errors))
+        Ok((
+            Dlt {
+                mmaps,
+                intern,
+                apid,
+                ctid,
+                ecu,
+                session_id,
+                storage_timestamp_ns,
+                message_timestamp_ns,
+                message_type,
+                log_level,
+                cnti,
+                payload_loc,
+            },
+            all_errors,
+        ))
     }
 
     pub fn len(&self) -> usize {
@@ -221,7 +225,7 @@ impl fmt::Debug for Dlt {
 // ---------------------------------------------------------------------------
 
 pub mod test_helpers {
-    use crate::dlt::protocol::*;
+    use super::protocol::*;
 
     /// Builds a spec-compliant AUTOSAR PRS v2 DLT message as raw bytes.
     ///
@@ -255,7 +259,7 @@ pub mod test_helpers {
                 message_timestamp_ns: None,
                 privacy_level: None,
                 message_type: MESSAGE_TYPE_LOG,
-                log_level: LOG_LEVEL_INFO,
+                log_level: LOG_INFO,
                 verbose_payload: Vec::new(),
                 noar: 0,
             }
@@ -342,8 +346,7 @@ pub mod test_helpers {
                 .extend_from_slice(&type_info.to_be_bytes());
             let bytes = s.as_bytes();
             let len = (bytes.len() + 1) as u16; // +1 for null terminator
-            self.verbose_payload
-                .extend_from_slice(&len.to_be_bytes());
+            self.verbose_payload.extend_from_slice(&len.to_be_bytes());
             self.verbose_payload.extend_from_slice(bytes);
             self.verbose_payload.push(0); // null terminator
             self.noar += 1;
@@ -456,6 +459,7 @@ pub mod test_helpers {
 
 #[cfg(test)]
 mod tests {
+    use super::protocol;
     use super::test_helpers::V2MessageBuilder;
     use super::*;
     use crate::dlt::error::ParseErrorKind;
@@ -492,7 +496,7 @@ mod tests {
         );
         assert_eq!(dlt.message_timestamp_ns(0), ts_ns);
         assert_eq!(dlt.message_type(0), protocol::MESSAGE_TYPE_LOG);
-        assert_eq!(dlt.log_level(0), protocol::LOG_LEVEL_INFO);
+        assert_eq!(dlt.log_level(0), protocol::LOG_INFO);
 
         // Payload should contain the verbose string argument bytes
         let raw = dlt.payload_raw(0);
@@ -510,7 +514,7 @@ mod tests {
             .with_timestamp_ns(ts_ns)
             .with_privacy_level(5)
             .with_message_type(protocol::MESSAGE_TYPE_TRACE)
-            .with_log_level(protocol::LOG_LEVEL_WARN)
+            .with_log_level(protocol::LOG_WARN)
             .with_verbose_string("world")
             .build();
 
@@ -531,7 +535,7 @@ mod tests {
         assert_eq!(dlt.session_id(0), 0xDEAD);
         assert_eq!(dlt.message_timestamp_ns(0), ts_ns);
         assert_eq!(dlt.message_type(0), protocol::MESSAGE_TYPE_TRACE);
-        assert_eq!(dlt.log_level(0), protocol::LOG_LEVEL_WARN);
+        assert_eq!(dlt.log_level(0), protocol::LOG_WARN);
 
         let raw = dlt.payload_raw(0);
         assert!(!raw.is_empty());
@@ -544,10 +548,10 @@ mod tests {
         {
             let mut f = std::fs::File::create(&path).unwrap();
             for (mstp, mtin) in [
-                (protocol::MESSAGE_TYPE_LOG, protocol::LOG_LEVEL_FATAL),
-                (protocol::MESSAGE_TYPE_TRACE, protocol::LOG_LEVEL_ERROR),
-                (protocol::MESSAGE_TYPE_NETWORK, protocol::LOG_LEVEL_WARN),
-                (protocol::MESSAGE_TYPE_CONTROL, protocol::LOG_LEVEL_INFO),
+                (protocol::MESSAGE_TYPE_LOG, protocol::LOG_FATAL),
+                (protocol::MESSAGE_TYPE_TRACE, protocol::LOG_ERROR),
+                (protocol::MESSAGE_TYPE_NETWORK, protocol::LOG_WARN),
+                (protocol::MESSAGE_TYPE_CONTROL, protocol::LOG_INFO),
             ] {
                 let msg = V2MessageBuilder::new()
                     .with_apid("APP1")
@@ -563,13 +567,13 @@ mod tests {
         assert_eq!(dlt.len(), 4);
 
         assert_eq!(dlt.message_type(0), protocol::MESSAGE_TYPE_LOG);
-        assert_eq!(dlt.log_level(0), protocol::LOG_LEVEL_FATAL);
+        assert_eq!(dlt.log_level(0), protocol::LOG_FATAL);
         assert_eq!(dlt.message_type(1), protocol::MESSAGE_TYPE_TRACE);
-        assert_eq!(dlt.log_level(1), protocol::LOG_LEVEL_ERROR);
+        assert_eq!(dlt.log_level(1), protocol::LOG_ERROR);
         assert_eq!(dlt.message_type(2), protocol::MESSAGE_TYPE_NETWORK);
-        assert_eq!(dlt.log_level(2), protocol::LOG_LEVEL_WARN);
+        assert_eq!(dlt.log_level(2), protocol::LOG_WARN);
         assert_eq!(dlt.message_type(3), protocol::MESSAGE_TYPE_CONTROL);
-        assert_eq!(dlt.log_level(3), protocol::LOG_LEVEL_INFO);
+        assert_eq!(dlt.log_level(3), protocol::LOG_INFO);
     }
 
     #[test]
@@ -613,7 +617,11 @@ mod tests {
         // v1 messages reported as InvalidVersion errors
         assert_eq!(dlt.len(), 0);
         assert!(!errors.is_empty());
-        assert!(errors.iter().all(|e| matches!(e.kind, ParseErrorKind::InvalidVersion { .. })));
+        assert!(
+            errors
+                .iter()
+                .all(|e| matches!(e.kind, ParseErrorKind::InvalidVersion { .. }))
+        );
     }
 
     #[test]
@@ -656,7 +664,13 @@ mod tests {
         {
             let mut f = std::fs::File::create(&path).unwrap();
             // Message 1 (valid)
-            f.write_all(&V2MessageBuilder::new().with_apid("APP1").with_ctid("CTX1").build()).unwrap();
+            f.write_all(
+                &V2MessageBuilder::new()
+                    .with_apid("APP1")
+                    .with_ctid("CTX1")
+                    .build(),
+            )
+            .unwrap();
             // Corrupted message: valid storage header, but version=3
             let mut bad = Vec::new();
             bad.extend_from_slice(b"DLT\x01");
@@ -672,9 +686,21 @@ mod tests {
             bad.push(0);
             f.write_all(&bad).unwrap();
             // Message 2 (valid)
-            f.write_all(&V2MessageBuilder::new().with_apid("APP2").with_ctid("CTX2").build()).unwrap();
+            f.write_all(
+                &V2MessageBuilder::new()
+                    .with_apid("APP2")
+                    .with_ctid("CTX2")
+                    .build(),
+            )
+            .unwrap();
             // Message 3 (valid)
-            f.write_all(&V2MessageBuilder::new().with_apid("APP3").with_ctid("CTX3").build()).unwrap();
+            f.write_all(
+                &V2MessageBuilder::new()
+                    .with_apid("APP3")
+                    .with_ctid("CTX3")
+                    .build(),
+            )
+            .unwrap();
         }
 
         let (dlt, errors) = Dlt::open(vec![path]).unwrap();
@@ -720,16 +746,34 @@ mod tests {
     #[test]
     fn multi_file_len_equals_sum() {
         let dir = tempfile::tempdir().unwrap();
-        let file1 = write_v2_file(dir.path(), "a.dlt", &[
-            V2MessageBuilder::new().with_ecu("ECU1").with_apid("AP01").with_ctid("CT01")
-                .with_storage_timestamp(100, 0).build(),
-            V2MessageBuilder::new().with_ecu("ECU1").with_apid("AP01").with_ctid("CT02")
-                .with_storage_timestamp(200, 0).build(),
-        ]);
-        let file2 = write_v2_file(dir.path(), "b.dlt", &[
-            V2MessageBuilder::new().with_ecu("ECU2").with_apid("AP02").with_ctid("CT03")
-                .with_storage_timestamp(150, 0).build(),
-        ]);
+        let file1 = write_v2_file(
+            dir.path(),
+            "a.dlt",
+            &[
+                V2MessageBuilder::new()
+                    .with_ecu("ECU1")
+                    .with_apid("AP01")
+                    .with_ctid("CT01")
+                    .with_storage_timestamp(100, 0)
+                    .build(),
+                V2MessageBuilder::new()
+                    .with_ecu("ECU1")
+                    .with_apid("AP01")
+                    .with_ctid("CT02")
+                    .with_storage_timestamp(200, 0)
+                    .build(),
+            ],
+        );
+        let file2 = write_v2_file(
+            dir.path(),
+            "b.dlt",
+            &[V2MessageBuilder::new()
+                .with_ecu("ECU2")
+                .with_apid("AP02")
+                .with_ctid("CT03")
+                .with_storage_timestamp(150, 0)
+                .build()],
+        );
 
         let (dlt, errors) = Dlt::open(vec![file1, file2]).unwrap();
         assert_eq!(errors.len(), 0);
@@ -739,14 +783,28 @@ mod tests {
     #[test]
     fn multi_file_payload_raw_accessible() {
         let dir = tempfile::tempdir().unwrap();
-        let file1 = write_v2_file(dir.path(), "a.dlt", &[
-            V2MessageBuilder::new().with_ecu("ECU1").with_apid("AP01").with_ctid("CT01")
-                .with_storage_timestamp(100, 0).with_verbose_string("from-file-1").build(),
-        ]);
-        let file2 = write_v2_file(dir.path(), "b.dlt", &[
-            V2MessageBuilder::new().with_ecu("ECU2").with_apid("AP02").with_ctid("CT02")
-                .with_storage_timestamp(200, 0).with_verbose_string("from-file-2").build(),
-        ]);
+        let file1 = write_v2_file(
+            dir.path(),
+            "a.dlt",
+            &[V2MessageBuilder::new()
+                .with_ecu("ECU1")
+                .with_apid("AP01")
+                .with_ctid("CT01")
+                .with_storage_timestamp(100, 0)
+                .with_verbose_string("from-file-1")
+                .build()],
+        );
+        let file2 = write_v2_file(
+            dir.path(),
+            "b.dlt",
+            &[V2MessageBuilder::new()
+                .with_ecu("ECU2")
+                .with_apid("AP02")
+                .with_ctid("CT02")
+                .with_storage_timestamp(200, 0)
+                .with_verbose_string("from-file-2")
+                .build()],
+        );
 
         let (dlt, errors) = Dlt::open(vec![file1, file2]).unwrap();
         assert_eq!(errors.len(), 0);
@@ -760,12 +818,22 @@ mod tests {
     #[test]
     fn multi_file_unique_ecus_sorted() {
         let dir = tempfile::tempdir().unwrap();
-        let file1 = write_v2_file(dir.path(), "a.dlt", &[
-            V2MessageBuilder::new().with_ecu("ZZZ1").with_storage_timestamp(100, 0).build(),
-        ]);
-        let file2 = write_v2_file(dir.path(), "b.dlt", &[
-            V2MessageBuilder::new().with_ecu("AAA1").with_storage_timestamp(200, 0).build(),
-        ]);
+        let file1 = write_v2_file(
+            dir.path(),
+            "a.dlt",
+            &[V2MessageBuilder::new()
+                .with_ecu("ZZZ1")
+                .with_storage_timestamp(100, 0)
+                .build()],
+        );
+        let file2 = write_v2_file(
+            dir.path(),
+            "b.dlt",
+            &[V2MessageBuilder::new()
+                .with_ecu("AAA1")
+                .with_storage_timestamp(200, 0)
+                .build()],
+        );
 
         let (dlt, _) = Dlt::open(vec![file1, file2]).unwrap();
         let ecus = dlt.unique_ecus();
@@ -775,18 +843,38 @@ mod tests {
     #[test]
     fn multi_file_unique_apids_and_ctids_deduplicated() {
         let dir = tempfile::tempdir().unwrap();
-        let file1 = write_v2_file(dir.path(), "a.dlt", &[
-            V2MessageBuilder::new().with_apid("APP1").with_ctid("CTX1")
-                .with_storage_timestamp(100, 0).build(),
-            V2MessageBuilder::new().with_apid("APP2").with_ctid("CTX1")
-                .with_storage_timestamp(200, 0).build(),
-        ]);
-        let file2 = write_v2_file(dir.path(), "b.dlt", &[
-            V2MessageBuilder::new().with_apid("APP1").with_ctid("CTX2")
-                .with_storage_timestamp(150, 0).build(),
-            V2MessageBuilder::new().with_apid("APP3").with_ctid("CTX2")
-                .with_storage_timestamp(250, 0).build(),
-        ]);
+        let file1 = write_v2_file(
+            dir.path(),
+            "a.dlt",
+            &[
+                V2MessageBuilder::new()
+                    .with_apid("APP1")
+                    .with_ctid("CTX1")
+                    .with_storage_timestamp(100, 0)
+                    .build(),
+                V2MessageBuilder::new()
+                    .with_apid("APP2")
+                    .with_ctid("CTX1")
+                    .with_storage_timestamp(200, 0)
+                    .build(),
+            ],
+        );
+        let file2 = write_v2_file(
+            dir.path(),
+            "b.dlt",
+            &[
+                V2MessageBuilder::new()
+                    .with_apid("APP1")
+                    .with_ctid("CTX2")
+                    .with_storage_timestamp(150, 0)
+                    .build(),
+                V2MessageBuilder::new()
+                    .with_apid("APP3")
+                    .with_ctid("CTX2")
+                    .with_storage_timestamp(250, 0)
+                    .build(),
+            ],
+        );
 
         let (dlt, _) = Dlt::open(vec![file1, file2]).unwrap();
 
@@ -801,15 +889,35 @@ mod tests {
     fn multi_file_preserves_file_order() {
         let dir = tempfile::tempdir().unwrap();
         // File 1: timestamps 100, 300
-        let file1 = write_v2_file(dir.path(), "a.dlt", &[
-            V2MessageBuilder::new().with_ecu("ECU1").with_storage_timestamp(100, 0).build(),
-            V2MessageBuilder::new().with_ecu("ECU1").with_storage_timestamp(300, 0).build(),
-        ]);
+        let file1 = write_v2_file(
+            dir.path(),
+            "a.dlt",
+            &[
+                V2MessageBuilder::new()
+                    .with_ecu("ECU1")
+                    .with_storage_timestamp(100, 0)
+                    .build(),
+                V2MessageBuilder::new()
+                    .with_ecu("ECU1")
+                    .with_storage_timestamp(300, 0)
+                    .build(),
+            ],
+        );
         // File 2: timestamps 50, 200
-        let file2 = write_v2_file(dir.path(), "b.dlt", &[
-            V2MessageBuilder::new().with_ecu("ECU2").with_storage_timestamp(50, 0).build(),
-            V2MessageBuilder::new().with_ecu("ECU2").with_storage_timestamp(200, 0).build(),
-        ]);
+        let file2 = write_v2_file(
+            dir.path(),
+            "b.dlt",
+            &[
+                V2MessageBuilder::new()
+                    .with_ecu("ECU2")
+                    .with_storage_timestamp(50, 0)
+                    .build(),
+                V2MessageBuilder::new()
+                    .with_ecu("ECU2")
+                    .with_storage_timestamp(200, 0)
+                    .build(),
+            ],
+        );
 
         let (dlt, errors) = Dlt::open(vec![file1, file2]).unwrap();
         assert_eq!(errors.len(), 0);
@@ -819,12 +927,15 @@ mod tests {
         let timestamps: Vec<u64> = (0..dlt.len())
             .map(|i| dlt.storage_timestamp_ns(i))
             .collect();
-        assert_eq!(timestamps, vec![
-            100 * 1_000_000_000,
-            300 * 1_000_000_000,
-            50 * 1_000_000_000,
-            200 * 1_000_000_000,
-        ]);
+        assert_eq!(
+            timestamps,
+            vec![
+                100 * 1_000_000_000,
+                300 * 1_000_000_000,
+                50 * 1_000_000_000,
+                200 * 1_000_000_000,
+            ]
+        );
     }
 
     #[test]
@@ -840,9 +951,11 @@ mod tests {
     #[test]
     fn is_empty_false_for_nonempty() {
         let dir = tempfile::tempdir().unwrap();
-        let path = write_v2_file(dir.path(), "one.dlt", &[
-            V2MessageBuilder::new().with_apid("APP1").build(),
-        ]);
+        let path = write_v2_file(
+            dir.path(),
+            "one.dlt",
+            &[V2MessageBuilder::new().with_apid("APP1").build()],
+        );
 
         let (dlt, _) = Dlt::open(vec![path]).unwrap();
         assert!(!dlt.is_empty());
