@@ -1,9 +1,9 @@
-pub mod v1;
-pub mod v2;
 pub mod error;
 pub mod intern;
 pub mod payload;
 pub mod protocol;
+pub mod v1;
+pub mod v2;
 
 use anyhow::Result;
 use std::fs::File;
@@ -12,7 +12,7 @@ use std::path::PathBuf;
 
 /// Detect the DLT protocol version from the first message in a file.
 ///
-/// Reads the HTYP byte immediately after the v1 storage header (16 bytes)
+/// Reads the Header Type byte immediately after the storage header (16 bytes)
 /// and extracts the version from bits 5-7.  Returns 1 for v1 files and
 /// 2 for v2 files.
 pub fn detect_version(path: &PathBuf) -> Result<u8> {

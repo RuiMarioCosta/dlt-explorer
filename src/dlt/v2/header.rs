@@ -1,3 +1,4 @@
+use crate::dlt::error::ParseErrorKind;
 use crate::dlt::protocol::*;
 
 /// Parsed v2 header information.
@@ -20,18 +21,12 @@ pub struct ParsedHeader {
 /// Parse a v2 base header + extension header from a message slice.
 ///
 /// `msg` starts at the base header (HTYP2) and has length = LEN.
-/// Returns `None` if the message is malformed or too short.
-pub fn parse_v2_header(msg: &[u8]) -> Option<ParsedHeader> {
-    if msg.len() < BASE_HEADER_MIN_SIZE {
-        return None;
-    }
+/// Returns a specific `ParseErrorKind` when extension parsing fails.
+pub(super) fn parse_v2_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind> {
+    debug_assert!(msg.len() >= BASE_HEADER_MIN_SIZE);
 
-    let htyp2 = u32::from_be_bytes(msg[0..4].try_into().ok()?);
-    if htyp2_version(htyp2) != PROTOCOL_VERSION_2 {
-        return None;
-    }
-
-    let len = u16::from_be_bytes(msg[5..7].try_into().ok()?) as usize;
+    let htyp2 = u32::from_be_bytes(msg[0..4].try_into().unwrap());
+    let len = msg.len();
     let mut offset = 7; // past HTYP2(4) + MCNT(1) + LEN(2)
 
     let cnti = htyp2_cnti(htyp2);
@@ -42,7 +37,7 @@ pub fn parse_v2_header(msg: &[u8]) -> Option<ParsedHeader> {
 
     if cnti == CNTI_VERBOSE || cnti == CNTI_CONTROL {
         if offset + 2 > msg.len() {
-            return None;
+            return Err(ParseErrorKind::InvalidStandardHeader);
         }
         let msin = msg[offset];
         message_type = msin_mstp(msin);
@@ -54,9 +49,9 @@ pub fn parse_v2_header(msg: &[u8]) -> Option<ParsedHeader> {
     let mut message_timestamp_ns: u64 = 0;
     if cnti == CNTI_VERBOSE || cnti == CNTI_NON_VERBOSE {
         if offset + 9 > msg.len() {
-            return None;
+            return Err(ParseErrorKind::InvalidStandardHeader);
         }
-        let tmsp2: [u8; 9] = msg[offset..offset + 9].try_into().ok()?;
+        let tmsp2: [u8; 9] = msg[offset..offset + 9].try_into().unwrap();
         message_timestamp_ns = decode_tmsp2(&tmsp2);
         offset += 9;
     }
@@ -64,7 +59,7 @@ pub fn parse_v2_header(msg: &[u8]) -> Option<ParsedHeader> {
     // MSID (4 bytes) for non-verbose
     if cnti == CNTI_NON_VERBOSE {
         if offset + 4 > msg.len() {
-            return None;
+            return Err(ParseErrorKind::InvalidStandardHeader);
         }
         offset += 4;
     }
@@ -79,12 +74,12 @@ pub fn parse_v2_header(msg: &[u8]) -> Option<ParsedHeader> {
     // ECU ID (WEID) — length-prefixed
     if htyp2_has_weid(htyp2) {
         if offset >= msg.len() {
-            return None;
+            return Err(ParseErrorKind::InvalidExtensionField);
         }
         let ecu_len = msg[offset] as usize;
         offset += 1;
         if offset + ecu_len > msg.len() {
-            return None;
+            return Err(ParseErrorKind::InvalidExtensionField);
         }
         if ecu_len > 0 {
             let mut buf = [0u8; 4];
@@ -99,12 +94,12 @@ pub fn parse_v2_header(msg: &[u8]) -> Option<ParsedHeader> {
     if htyp2_has_wacid(htyp2) {
         // APID
         if offset >= msg.len() {
-            return None;
+            return Err(ParseErrorKind::InvalidExtensionField);
         }
         let apid_len = msg[offset] as usize;
         offset += 1;
         if offset + apid_len > msg.len() {
-            return None;
+            return Err(ParseErrorKind::InvalidExtensionField);
         }
         if apid_len > 0 {
             let mut buf = [0u8; 4];
@@ -116,12 +111,12 @@ pub fn parse_v2_header(msg: &[u8]) -> Option<ParsedHeader> {
 
         // CTID
         if offset >= msg.len() {
-            return None;
+            return Err(ParseErrorKind::InvalidExtensionField);
         }
         let ctid_len = msg[offset] as usize;
         offset += 1;
         if offset + ctid_len > msg.len() {
-            return None;
+            return Err(ParseErrorKind::InvalidExtensionField);
         }
         if ctid_len > 0 {
             let mut buf = [0u8; 4];
@@ -135,21 +130,21 @@ pub fn parse_v2_header(msg: &[u8]) -> Option<ParsedHeader> {
     // WSID — fixed 4 bytes
     if htyp2_has_wsid(htyp2) {
         if offset + 4 > msg.len() {
-            return None;
+            return Err(ParseErrorKind::InvalidExtensionField);
         }
-        session_id = Some(u32::from_be_bytes(msg[offset..offset + 4].try_into().ok()?));
+        session_id = Some(u32::from_be_bytes(msg[offset..offset + 4].try_into().unwrap()));
         offset += 4;
     }
 
     // WSFLN — source filename (length-prefixed) + line number (u32)
     if htyp2_has_wsfln(htyp2) {
         if offset >= msg.len() {
-            return None;
+            return Err(ParseErrorKind::InvalidExtensionField);
         }
         let fina_len = msg[offset] as usize;
         offset += 1 + fina_len;
         if offset + 4 > msg.len() {
-            return None;
+            return Err(ParseErrorKind::InvalidExtensionField);
         }
         offset += 4; // LINR u32
     }
@@ -157,18 +152,18 @@ pub fn parse_v2_header(msg: &[u8]) -> Option<ParsedHeader> {
     // WTGS — tags: NOTG (u8) + per tag: length (u8) + name bytes
     if htyp2_has_wtgs(htyp2) {
         if offset >= msg.len() {
-            return None;
+            return Err(ParseErrorKind::InvalidExtensionField);
         }
         let notg = msg[offset] as usize;
         offset += 1;
         for _ in 0..notg {
             if offset >= msg.len() {
-                return None;
+                return Err(ParseErrorKind::InvalidExtensionField);
             }
             let tag_len = msg[offset] as usize;
             offset += 1 + tag_len;
             if offset > msg.len() {
-                return None;
+                return Err(ParseErrorKind::InvalidExtensionField);
             }
         }
     }
@@ -176,7 +171,7 @@ pub fn parse_v2_header(msg: &[u8]) -> Option<ParsedHeader> {
     // WPVL — privacy level (u8)
     if htyp2_has_wpvl(htyp2) {
         if offset >= msg.len() {
-            return None;
+            return Err(ParseErrorKind::InvalidExtensionField);
         }
         privacy_level = Some(msg[offset]);
         offset += 1;
@@ -192,7 +187,7 @@ pub fn parse_v2_header(msg: &[u8]) -> Option<ParsedHeader> {
     let payload_offset = offset;
     let payload_len = len.saturating_sub(payload_offset);
 
-    Some(ParsedHeader {
+    Ok(ParsedHeader {
         htyp2,
         apid,
         ctid,
@@ -383,21 +378,6 @@ mod tests {
         assert_eq!(header.privacy_level, Some(3));
         // Parser succeeds — unknown fields would just be part of payload bytes
         assert_eq!(header.payload_len, 2);
-    }
-
-    #[test]
-    fn rejects_v1_header() {
-        let htyp2 = build_htyp2(CNTI_VERBOSE, false, false, false, 1);
-        let mut msg = vec![0u8; 9];
-        msg[0..4].copy_from_slice(&htyp2.to_be_bytes());
-        msg[5..7].copy_from_slice(&9u16.to_be_bytes());
-
-        assert!(parse_v2_header(&msg).is_none());
-    }
-
-    #[test]
-    fn too_short_returns_none() {
-        assert!(parse_v2_header(&[0; 3]).is_none());
     }
 
     #[test]

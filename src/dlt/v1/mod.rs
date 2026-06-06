@@ -1,6 +1,6 @@
-pub mod framer;
-pub mod header;
-pub mod payload;
+mod framer;
+mod header;
+mod payload;
 
 use anyhow::Result;
 use memmap2::Mmap;
@@ -73,13 +73,16 @@ impl Dlt {
                     next_override += 1;
                 }
 
-                let Some(hdr) = parse_v1_header(msg) else {
-                    all_errors.push(ParseError {
-                        file_index: file_idx as u16,
-                        byte_offset: frame.msg_start as u64,
-                        kind: ParseErrorKind::InvalidExtensionField,
-                    });
-                    continue;
+                let hdr = match parse_v1_header(msg) {
+                    Ok(hdr) => hdr,
+                    Err(kind) => {
+                        all_errors.push(ParseError {
+                            file_index: file_idx as u16,
+                            byte_offset: frame.msg_start as u64,
+                            kind,
+                        });
+                        continue;
+                    }
                 };
 
                 let ecu_id = match &hdr.ecu {
@@ -92,7 +95,7 @@ impl Dlt {
                             all_errors.push(ParseError {
                                 file_index: file_idx as u16,
                                 byte_offset: frame.msg_start as u64,
-                                kind: ParseErrorKind::InvalidExtensionField,
+                                kind: ParseErrorKind::InvalidStandardHeader,
                             });
                             continue;
                         };

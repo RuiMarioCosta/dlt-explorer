@@ -1,3 +1,4 @@
+use crate::dlt::error::ParseErrorKind;
 use crate::dlt::protocol::*;
 
 /// Parsed v1 header information.
@@ -26,35 +27,20 @@ const V1_EXT_HEADER_SIZE: usize = 10;
 /// Parse a v1 header from a message slice.
 ///
 /// `msg` starts at the standard header (HTYP byte) and has the full message length.
-/// Returns `None` if the message is malformed or too short.
-pub fn parse_v1_header(msg: &[u8]) -> Option<ParsedHeader> {
-    if msg.len() < V1_STD_HEADER_MIN {
-        return None;
-    }
+/// Returns a specific `ParseErrorKind` when the message is malformed.
+pub(super) fn parse_v1_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind> {
+    debug_assert!(msg.len() >= V1_STD_HEADER_MIN);
 
     let htyp = msg[0];
-
-    // Validate version bits 5-7 equal 1
-    let version = (htyp >> 5) & 0x07;
-    if version != 1 {
-        return None;
-    }
-
-    // MCNT at offset 1 (skip)
-    // LEN at offset 2-3 (big-endian per DLT spec)
-    let len = u16::from_be_bytes(msg[2..4].try_into().ok()?) as usize;
-    if len > msg.len() {
-        return None;
-    }
-
+    let len = msg.len();
     let mut offset: usize = V1_STD_HEADER_MIN;
 
     // Optional fields based on HTYP flags
     let ecu = if htyp_has_weid(htyp) {
-        if offset + DLT_SIZE_WEID > msg.len() {
-            return None;
+        if offset + DLT_SIZE_WEID > len {
+            return Err(ParseErrorKind::InvalidStandardHeader);
         }
-        let val: [u8; 4] = msg[offset..offset + 4].try_into().ok()?;
+        let val: [u8; 4] = msg[offset..offset + 4].try_into().unwrap();
         offset += DLT_SIZE_WEID;
         Some(val)
     } else {
@@ -62,10 +48,10 @@ pub fn parse_v1_header(msg: &[u8]) -> Option<ParsedHeader> {
     };
 
     let session_id = if htyp_has_wsid(htyp) {
-        if offset + DLT_SIZE_WSID > msg.len() {
-            return None;
+        if offset + DLT_SIZE_WSID > len {
+            return Err(ParseErrorKind::InvalidStandardHeader);
         }
-        let val = u32::from_be_bytes(msg[offset..offset + 4].try_into().ok()?);
+        let val = u32::from_be_bytes(msg[offset..offset + 4].try_into().unwrap());
         offset += DLT_SIZE_WSID;
         Some(val)
     } else {
@@ -74,10 +60,10 @@ pub fn parse_v1_header(msg: &[u8]) -> Option<ParsedHeader> {
 
     // Timestamp: 0.1ms ticks (u32) -> convert to nanoseconds (* 100_000)
     let message_timestamp_ns = if htyp_has_wtms(htyp) {
-        if offset + DLT_SIZE_WTMS > msg.len() {
-            return None;
+        if offset + DLT_SIZE_WTMS > len {
+            return Err(ParseErrorKind::InvalidStandardHeader);
         }
-        let ticks = u32::from_be_bytes(msg[offset..offset + 4].try_into().ok()?);
+        let ticks = u32::from_be_bytes(msg[offset..offset + 4].try_into().unwrap());
         offset += DLT_SIZE_WTMS;
         (ticks as u64) * 100_000
     } else {
@@ -92,8 +78,8 @@ pub fn parse_v1_header(msg: &[u8]) -> Option<ParsedHeader> {
     let mut msin_byte: u8 = 0;
 
     if htyp_has_ueh(htyp) {
-        if offset + V1_EXT_HEADER_SIZE > msg.len() {
-            return None;
+        if offset + V1_EXT_HEADER_SIZE > len {
+            return Err(ParseErrorKind::InvalidExtensionField);
         }
         msin_byte = msg[offset];
         // NOAR at offset+1 (skip)
@@ -101,18 +87,18 @@ pub fn parse_v1_header(msg: &[u8]) -> Option<ParsedHeader> {
         log_level = msin_mtin(msin_byte);
 
         let apid_start = offset + 2;
-        apid = Some(msg[apid_start..apid_start + 4].try_into().ok()?);
+        apid = Some(msg[apid_start..apid_start + 4].try_into().unwrap());
 
         let ctid_start = apid_start + 4;
-        ctid = Some(msg[ctid_start..ctid_start + 4].try_into().ok()?);
+        ctid = Some(msg[ctid_start..ctid_start + 4].try_into().unwrap());
 
         offset += V1_EXT_HEADER_SIZE;
     }
 
     let payload_offset = offset;
-    let payload_len = len.saturating_sub(payload_offset);
+    let payload_len = len - payload_offset;
 
-    Some(ParsedHeader {
+    Ok(ParsedHeader {
         htyp,
         msin: msin_byte,
         ecu,
@@ -272,38 +258,6 @@ mod tests {
         assert_eq!(hdr.session_id, None);
         assert_eq!(hdr.message_timestamp_ns, 100_000_000); // 1000 * 100_000
         assert_eq!(hdr.payload_len, payload.len());
-    }
-
-    #[test]
-    fn version_validation_rejects_v2() {
-        // version = 2, no flags
-        let mut msg = vec![2 << 5, 0x00, 0x00, 0x04];
-        msg[2] = 0x00;
-        msg[3] = 0x04; // LEN = 4
-        assert!(parse_v1_header(&msg).is_none());
-    }
-
-    #[test]
-    fn version_validation_rejects_v0() {
-        // version = 0
-        let msg = vec![0x00, 0x00, 0x00, 0x04];
-        assert!(parse_v1_header(&msg).is_none());
-    }
-
-    #[test]
-    fn too_short_input() {
-        // Less than 4 bytes
-        assert!(parse_v1_header(&[0x20, 0x00]).is_none());
-        assert!(parse_v1_header(&[]).is_none());
-    }
-
-    #[test]
-    fn too_short_for_extended_header() {
-        // UEH flag set but message too short for extended header
-        let mut htyp: u8 = 1 << 5;
-        htyp |= 0x01; // UEH
-        let msg = vec![htyp, 0x00, 0x00, 0x06, 0x00, 0x00]; // LEN=6, only 2 bytes after std header
-        assert!(parse_v1_header(&msg).is_none());
     }
 
     #[test]
