@@ -61,6 +61,86 @@ fn display_payload(value: String) -> String {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct StructuredFilter {
+    ecu_contains: String,
+    apid_contains: String,
+    ctid_contains: String,
+    kind_contains: String,
+}
+
+impl StructuredFilter {
+    fn reset(&mut self) {
+        *self = Self::default();
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct IndexLayer {
+    visible_indices: Vec<usize>,
+}
+
+impl IndexLayer {
+    fn from_filter(dlt: &RetainedDlt, filter: &StructuredFilter) -> Self {
+        let visible_indices = (0..dlt.len())
+            .filter(|&index| {
+                let ecu_matches = contains_ignore_case(
+                    dlt.ecu(index),
+                    filter.ecu_contains.as_str(),
+                );
+                let apid_matches = contains_ignore_case(
+                    dlt.apid(index),
+                    filter.apid_contains.as_str(),
+                );
+                let ctid_matches = contains_ignore_case(
+                    dlt.ctid(index),
+                    filter.ctid_contains.as_str(),
+                );
+                let kind = format_message_type(
+                    dlt.message_type(index),
+                    dlt.message_type_info(index),
+                );
+                let kind_matches = contains_ignore_case(
+                    kind.as_str(),
+                    filter.kind_contains.as_str(),
+                );
+
+                ecu_matches && apid_matches && ctid_matches && kind_matches
+            })
+            .collect();
+
+        Self { visible_indices }
+    }
+
+    fn visible_count(&self) -> usize {
+        self.visible_indices.len()
+    }
+
+    fn visible_rows(
+        &self,
+        dlt: &RetainedDlt,
+        range: Range<usize>,
+    ) -> Vec<LogTableRow> {
+        let total_rows = self.visible_count();
+        let start = range.start.min(total_rows);
+        let end = range.end.min(total_rows);
+
+        self.visible_indices[start..end]
+            .iter()
+            .copied()
+            .map(|idx| dlt.row(idx))
+            .collect()
+    }
+}
+
+fn contains_ignore_case(value: &str, query: &str) -> bool {
+    if query.is_empty() {
+        return true;
+    }
+
+    value.to_ascii_lowercase().contains(&query.to_ascii_lowercase())
+}
+
 #[derive(Debug)]
 enum RetainedDlt {
     V1(dlt::v1::Dlt),
@@ -93,6 +173,41 @@ impl RetainedDlt {
         match self {
             Self::V1(dlt) => dlt.unique_ctids().len(),
             Self::V2(dlt) => dlt.unique_ctids().len(),
+        }
+    }
+
+    fn ecu(&self, index: usize) -> &str {
+        match self {
+            Self::V1(dlt) => dlt.ecu(index),
+            Self::V2(dlt) => dlt.ecu(index),
+        }
+    }
+
+    fn apid(&self, index: usize) -> &str {
+        match self {
+            Self::V1(dlt) => dlt.apid(index),
+            Self::V2(dlt) => dlt.apid(index),
+        }
+    }
+
+    fn ctid(&self, index: usize) -> &str {
+        match self {
+            Self::V1(dlt) => dlt.ctid(index),
+            Self::V2(dlt) => dlt.ctid(index),
+        }
+    }
+
+    fn message_type(&self, index: usize) -> u8 {
+        match self {
+            Self::V1(dlt) => dlt.message_type(index),
+            Self::V2(dlt) => dlt.message_type(index),
+        }
+    }
+
+    fn message_type_info(&self, index: usize) -> u8 {
+        match self {
+            Self::V1(dlt) => dlt.message_type_info(index),
+            Self::V2(dlt) => dlt.message_type_info(index),
         }
     }
 
@@ -132,6 +247,8 @@ struct RetainedDataSet {
     version: u8,
     parse_errors: Vec<ParseError>,
     dlt: RetainedDlt,
+    index: IndexLayer,
+    active_filter: StructuredFilter,
 }
 
 impl RetainedDataSet {
@@ -159,12 +276,71 @@ impl RetainedDataSet {
         self.dlt.unique_ctid_count()
     }
 
-    fn visible_rows(&self, range: Range<usize>) -> Vec<LogTableRow> {
-        let total_rows = self.message_count();
-        let start = range.start.min(total_rows);
-        let end = range.end.min(total_rows);
-        (start..end).map(|idx| self.dlt.row(idx)).collect()
+    fn visible_message_count(&self) -> usize {
+        self.index.visible_count()
     }
+
+    fn rebuild_index(&mut self) {
+        self.index = IndexLayer::from_filter(&self.dlt, &self.active_filter);
+    }
+
+    fn clear_filter(&mut self) {
+        self.active_filter.reset();
+        self.rebuild_index();
+    }
+
+    fn visible_rows(&self, range: Range<usize>) -> Vec<LogTableRow> {
+        self.index.visible_rows(&self.dlt, range)
+    }
+}
+
+fn render_structured_filter_controls(ui: &mut egui::Ui, data: &mut RetainedDataSet) {
+    ui.separator();
+    ui.label("Structured Filter");
+
+    let mut changed = false;
+    let mut clear_clicked = false;
+    ui.horizontal(|ui| {
+        let filter = &mut data.active_filter;
+        changed |= ui
+            .add(
+                egui::TextEdit::singleline(&mut filter.ecu_contains)
+                    .hint_text("ECU contains"),
+            )
+            .changed();
+        changed |= ui
+            .add(
+                egui::TextEdit::singleline(&mut filter.apid_contains)
+                    .hint_text("APID contains"),
+            )
+            .changed();
+        changed |= ui
+            .add(
+                egui::TextEdit::singleline(&mut filter.ctid_contains)
+                    .hint_text("CTID contains"),
+            )
+            .changed();
+        changed |= ui
+            .add(
+                egui::TextEdit::singleline(&mut filter.kind_contains)
+                    .hint_text("Type contains"),
+            )
+            .changed();
+
+        clear_clicked = ui.button("Clear").clicked();
+    });
+
+    if clear_clicked {
+        data.clear_filter();
+    } else if changed {
+        data.rebuild_index();
+    }
+
+    ui.label(format!(
+        "Visible rows: {} / {}",
+        data.visible_message_count(),
+        data.message_count()
+    ));
 }
 
 fn render_log_table(ui: &mut egui::Ui, data: &RetainedDataSet) {
@@ -200,9 +376,9 @@ fn render_log_table(ui: &mut egui::Ui, data: &RetainedDataSet) {
     });
     ui.separator();
 
-    let total_rows = data.message_count();
+    let total_rows = data.visible_message_count();
     if total_rows == 0 {
-        ui.label("No log rows available.");
+        ui.label("No log rows match the structured filter.");
         return;
     }
 
@@ -274,8 +450,8 @@ impl DesktopModel {
         self.state = DesktopAppState::Loading;
     }
 
-    fn loaded_data(&self) -> Option<&RetainedDataSet> {
-        self.retained.as_ref()
+    fn loaded_data_mut(&mut self) -> Option<&mut RetainedDataSet> {
+        self.retained.as_mut()
     }
 
     fn loading_succeeded(&mut self, data: RetainedDataSet) {
@@ -314,20 +490,32 @@ fn load_retained_dataset(paths: Vec<PathBuf>) -> Result<RetainedDataSet> {
 
     if version == 1 {
         let (dlt, parse_errors) = dlt::v1::Dlt::open(paths.clone())?;
-        Ok(RetainedDataSet {
+        let mut data = RetainedDataSet {
             paths,
             version,
             parse_errors,
             dlt: RetainedDlt::V1(dlt),
-        })
+            index: IndexLayer {
+                visible_indices: Vec::new(),
+            },
+            active_filter: StructuredFilter::default(),
+        };
+        data.rebuild_index();
+        Ok(data)
     } else if version == 2 {
         let (dlt, parse_errors) = dlt::v2::Dlt::open(paths.clone())?;
-        Ok(RetainedDataSet {
+        let mut data = RetainedDataSet {
             paths,
             version,
             parse_errors,
             dlt: RetainedDlt::V2(dlt),
-        })
+            index: IndexLayer {
+                visible_indices: Vec::new(),
+            },
+            active_filter: StructuredFilter::default(),
+        };
+        data.rebuild_index();
+        Ok(data)
     } else {
         Err(anyhow!("Unsupported DLT version: {}", version))
     }
@@ -369,7 +557,7 @@ impl eframe::App for DesktopShell {
             ui.heading("DLT Explorer");
             ui.separator();
 
-            match self.model.state() {
+            match self.model.state().clone() {
                 DesktopAppState::Idle => {
                     ui.label("State: idle");
                     ui.label("No DLT files loaded.");
@@ -382,7 +570,7 @@ impl eframe::App for DesktopShell {
                 DesktopAppState::Loaded => {
                     ui.label("State: loaded");
 
-                    if let Some(data) = self.model.loaded_data() {
+                    if let Some(data) = self.model.loaded_data_mut() {
                         ui.label(format!(
                             "Loaded {} message(s) from {} file(s) (DLT v{}).",
                             data.message_count(),
@@ -416,6 +604,7 @@ impl eframe::App for DesktopShell {
                             }
                         }
 
+                        render_structured_filter_controls(ui, data);
                         render_log_table(ui, data);
                     }
                 }
@@ -442,7 +631,8 @@ pub(crate) fn run_desktop_shell() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        DesktopAppState, DesktopModel, format_message_type, load_retained_dataset,
+        DesktopAppState, DesktopModel, StructuredFilter, format_message_type,
+        load_retained_dataset,
     };
     use std::path::PathBuf;
 
@@ -508,6 +698,50 @@ mod tests {
         let total = data.message_count();
         let rows = data.visible_rows(total..(total + 50));
         assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn structured_filter_returns_no_rows_when_no_match() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "tests/data/testfile_control_messages.dlt",
+        );
+
+        let mut data = load_retained_dataset(vec![path]).expect("fixture should load");
+        data.active_filter = StructuredFilter {
+            ecu_contains: "definitely-not-a-real-ecu".to_string(),
+            ..StructuredFilter::default()
+        };
+        data.rebuild_index();
+
+        assert_eq!(data.visible_message_count(), 0);
+        assert!(data.visible_rows(0..10).is_empty());
+    }
+
+    #[test]
+    fn structured_filter_updates_visible_results_when_changed() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "tests/data/testfile_control_messages.dlt",
+        );
+
+        let mut data = load_retained_dataset(vec![path]).expect("fixture should load");
+        let total = data.message_count();
+        assert!(total > 0);
+
+        data.active_filter = StructuredFilter {
+            kind_contains: "control".to_string(),
+            ..StructuredFilter::default()
+        };
+        data.rebuild_index();
+        let control_count = data.visible_message_count();
+        assert!(control_count > 0);
+        assert!(control_count <= total);
+
+        data.active_filter.kind_contains = "no-such-message-type".to_string();
+        data.rebuild_index();
+        assert_eq!(data.visible_message_count(), 0);
+
+        data.clear_filter();
+        assert_eq!(data.visible_message_count(), total);
     }
 
     #[test]
