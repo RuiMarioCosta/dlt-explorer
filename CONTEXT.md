@@ -46,3 +46,27 @@ _Avoid_: app name, source
 **CTID**:
 Context ID — identifies a logical logging context within an application. 4-byte null-padded ASCII.
 _Avoid_: channel, category
+
+**Log Table**:
+The primary message list used to explore DLT traffic. Each row represents one DLT message and exposes key fields such as timestamp, ECU, APID, CTID, type, and payload.
+_Avoid_: raw row buffer, UI cache
+
+**Viewport Rendering**:
+Rendering only the subset of Log Table rows that are currently visible to the user, instead of rendering the entire loaded message set.
+_Avoid_: full-table rendering, eager row painting
+
+**Retained Data Layer**:
+The application-owned in-memory representation of loaded DLT data and derived message metadata, independent of any specific GUI framework.
+_Avoid_: widget state, UI row model
+
+**Index Layer**:
+Derived lookup structures that support fast filtering, search, sorting, and navigation over loaded DLT data.
+_Avoid_: cache (as a generic term), UI state
+
+**Structured Filter**:
+A filter expressed against parsed DLT fields such as ECU, APID, CTID, message type, timestamps, or decoded argument values.
+_Avoid_: text search, grep filter
+
+**Rendered Text Search**:
+A search over the user-visible textual representation of a DLT message, including rendered payload text shown in the UI.
+_Avoid_: structured filter, raw byte search
