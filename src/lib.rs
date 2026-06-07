@@ -1,10 +1,9 @@
 mod cmd_line_parser;
+mod desktop;
 pub mod dlt;
-mod gui;
 
 use crate::dlt::payload::{MESSAGE_TYPE, decode_message_type_info};
 use anyhow::{Result, anyhow};
-use gui::DltExplorer;
 
 pub use cmd_line_parser::{Cli, Parser};
 
@@ -19,7 +18,7 @@ pub fn process_dlt(args: Cli) -> Result<()> {
 }
 
 fn process_in_gui(_args: Cli) -> Result<()> {
-    iced::application("Dlt Explorer", DltExplorer::update, DltExplorer::view).run()?;
+    desktop::run_desktop_shell()?;
 
     Ok(())
 }
