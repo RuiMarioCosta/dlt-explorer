@@ -261,7 +261,6 @@ pub mod test_helpers {
         ecu: Option<[u8; 4]>,
         session_id: Option<u32>,
         message_timestamp_ns: Option<u64>,
-        privacy_level: Option<u8>,
         message_type: u8,
         message_type_info: u8,
         verbose_payload: Vec<u8>,
@@ -279,7 +278,6 @@ pub mod test_helpers {
                 ecu: None,
                 session_id: None,
                 message_timestamp_ns: None,
-                privacy_level: None,
                 message_type: MESSAGE_TYPE_LOG,
                 message_type_info: LOG_LEVEL_INFO,
                 verbose_payload: Vec::new(),
@@ -345,11 +343,6 @@ pub mod test_helpers {
             self
         }
 
-        pub fn with_privacy_level(mut self, level: u8) -> Self {
-            self.privacy_level = Some(level);
-            self
-        }
-
         pub fn with_message_type(mut self, mstp: u8) -> Self {
             self.message_type = mstp;
             self
@@ -389,7 +382,6 @@ pub mod test_helpers {
             let has_wacid = self.apid.is_some() || self.ctid.is_some();
             let has_weid = self.ecu.is_some();
             let has_wsid = self.session_id.is_some();
-            let has_wpvl = self.privacy_level.is_some();
 
             let htyp2 = build_htyp2_full(
                 CNTI_VERBOSE,
@@ -399,7 +391,7 @@ pub mod test_helpers {
                 PROTOCOL_VERSION_2,
                 false, // WSFLN
                 false, // WTGS
-                has_wpvl,
+                false, // WPVL
                 false, // WSGM
             );
 
@@ -419,9 +411,6 @@ pub mod test_helpers {
                 }
                 if has_wsid {
                     sz += 4; // fixed 4 bytes
-                }
-                if has_wpvl {
-                    sz += 1; // 1 byte
                 }
                 sz
             };
@@ -465,10 +454,6 @@ pub mod test_helpers {
 
             if let Some(sid) = self.session_id {
                 msg.extend_from_slice(&sid.to_be_bytes());
-            }
-
-            if let Some(pvl) = self.privacy_level {
-                msg.push(pvl);
             }
 
             // --- Payload ---
@@ -534,7 +519,6 @@ mod tests {
             .with_ecu("ECU2")
             .with_session_id(0xDEAD)
             .with_timestamp_ns(ts_ns)
-            .with_privacy_level(5)
             .with_message_type(protocol::MESSAGE_TYPE_TRACE)
             .with_message_type_info(protocol::LOG_LEVEL_WARN)
             .with_verbose_string("world")

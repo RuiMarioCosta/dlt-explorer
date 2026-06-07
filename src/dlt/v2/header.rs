@@ -11,7 +11,6 @@ pub struct ParsedHeader {
     pub message_timestamp_ns: u64,
     pub message_type: u8,
     pub message_type_info: u8,
-    pub privacy_level: Option<u8>,
     /// Byte offset of the payload start within the message slice.
     pub payload_offset: usize,
     /// Payload length in bytes.
@@ -69,7 +68,6 @@ pub(super) fn parse_v2_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind
     let mut ctid = None;
     let mut ecu = None;
     let mut session_id = None;
-    let mut privacy_level = None;
 
     // ECU ID (WEID) — length-prefixed
     if htyp2_has_weid(htyp2) {
@@ -175,7 +173,6 @@ pub(super) fn parse_v2_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind
         if offset >= msg.len() {
             return Err(ParseErrorKind::InvalidExtensionField);
         }
-        privacy_level = Some(msg[offset]);
         offset += 1;
     }
 
@@ -198,7 +195,6 @@ pub(super) fn parse_v2_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind
         message_timestamp_ns,
         message_type,
         message_type_info,
-        privacy_level,
         payload_offset,
         payload_len,
     })
@@ -321,7 +317,6 @@ mod tests {
         assert_eq!(header.message_timestamp_ns, ts_ns);
         assert_eq!(header.message_type, MESSAGE_TYPE_TRACE);
         assert_eq!(header.message_type_info, LOG_LEVEL_WARN);
-        assert_eq!(header.privacy_level, Some(7));
         assert_eq!(header.payload_len, 1);
     }
 
@@ -348,7 +343,6 @@ mod tests {
         assert_eq!(header.apid, None);
         assert_eq!(header.ctid, None);
         assert_eq!(header.session_id, None);
-        assert_eq!(header.privacy_level, None);
         assert_eq!(header.message_type, MESSAGE_TYPE_LOG);
         assert_eq!(header.message_type_info, LOG_LEVEL_DEBUG);
     }
@@ -388,7 +382,6 @@ mod tests {
         msg[len_pos..len_pos + 2].copy_from_slice(&len.to_be_bytes());
 
         let header = parse_v2_header(&msg).unwrap();
-        assert_eq!(header.privacy_level, Some(3));
         // Parser succeeds — unknown fields would just be part of payload bytes
         assert_eq!(header.payload_len, 2);
     }
