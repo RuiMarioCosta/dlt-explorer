@@ -71,6 +71,18 @@ fn check_existence_of_sort_flag() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn check_existence_of_limit_flag() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("dlt-explorer")?;
+    let path1 = PathBuf::from(
+        env!("CARGO_MANIFEST_DIR").to_string() + "/tests/data/testfile_control_messages.dlt",
+    );
+    cmd.arg("-t").arg("--limit").arg("2").arg(path1);
+    cmd.assert().success();
+
+    Ok(())
+}
+
+#[test]
 fn call_with_multiple_parameters() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("dlt-explorer")?;
     let path1 = PathBuf::from(

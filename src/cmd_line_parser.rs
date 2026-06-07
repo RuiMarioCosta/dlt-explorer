@@ -18,4 +18,8 @@ pub struct Cli {
     /// Sort DLT files by name
     #[arg(short, long, default_value_t = false)]
     pub sort: bool,
+
+    /// Maximum number of rows to print in terminal mode
+    #[arg(short, long)]
+    pub limit: Option<usize>,
 }

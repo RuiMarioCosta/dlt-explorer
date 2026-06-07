@@ -10,8 +10,6 @@ pub struct ParsedHeader {
     pub ctid: Option<[u8; 4]>,
     pub session_id: Option<u32>,
     pub message_timestamp_ns: u64,
-    pub message_type: u8,
-    pub log_level: u8,
     /// Byte offset of the payload start within the message slice.
     pub payload_offset: usize,
     /// Payload length in bytes.
@@ -67,8 +65,6 @@ pub(super) fn parse_v1_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind
     // Extended header (if UEH flag set)
     let mut apid = None;
     let mut ctid = None;
-    let mut message_type: u8 = 0;
-    let mut log_level: u8 = 0;
     let mut msin_byte: u8 = 0;
 
     if htyp_has_ueh(htyp) {
@@ -77,8 +73,6 @@ pub(super) fn parse_v1_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind
         }
         msin_byte = msg[offset];
         // NOAR at offset+1 (skip)
-        message_type = msin_mstp(msin_byte);
-        log_level = msin_mtin(msin_byte);
 
         let apid_start = offset + 2;
         apid = Some(msg[apid_start..apid_start + SIZE_APID].try_into().unwrap());
@@ -100,8 +94,6 @@ pub(super) fn parse_v1_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind
         ctid,
         session_id,
         message_timestamp_ns,
-        message_type,
-        log_level,
         payload_offset,
         payload_len,
     })
@@ -127,13 +119,13 @@ mod tests {
             htyp |= 0x10;
         }
 
-        let mut msg = Vec::new();
-        msg.push(htyp);
-        msg.push(0x42); // MCNT
-
-        // We'll fix up LEN after building the full message
-        msg.push(0x00); // LEN placeholder high byte
-        msg.push(0x00); // LEN placeholder low byte
+        let mut msg = vec![
+            htyp, // HTYP
+            0x42, //MCNT
+            // We'll fix up LEN after building the full message
+            0x00, // LEN placeholder high byte
+            0x00, // LEN placeholder low byte,
+        ];
 
         if weid {
             msg.extend_from_slice(b"ECU1");
@@ -174,8 +166,6 @@ mod tests {
         assert_eq!(hdr.message_timestamp_ns, 1000 * 100_000);
         assert_eq!(hdr.apid, Some(*b"APP1"));
         assert_eq!(hdr.ctid, Some(*b"CTX1"));
-        assert_eq!(hdr.message_type, 0x00); // LOG
-        assert_eq!(hdr.log_level, 0x03); // WARN
         assert_eq!(hdr.payload_len, payload.len());
         assert_eq!(&msg[hdr.payload_offset..], payload);
     }
@@ -191,8 +181,6 @@ mod tests {
         assert_eq!(hdr.message_timestamp_ns, 0);
         assert_eq!(hdr.apid, None);
         assert_eq!(hdr.ctid, None);
-        assert_eq!(hdr.message_type, 0);
-        assert_eq!(hdr.log_level, 0);
         assert_eq!(hdr.payload_len, payload.len());
         assert_eq!(&msg[hdr.payload_offset..], payload);
     }

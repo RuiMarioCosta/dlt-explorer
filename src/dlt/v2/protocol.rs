@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// Base header minimum size: HTYP2(4) + MCNT(1) + LEN(2) = 7.
 pub const BASE_HEADER_MIN_SIZE: usize = 7;
 
@@ -27,12 +29,12 @@ pub const MESSAGE_TYPE_TRACE: u8 = 0x01;
 pub const MESSAGE_TYPE_NETWORK: u8 = 0x02;
 pub const MESSAGE_TYPE_CONTROL: u8 = 0x03;
 
-pub const LOG_FATAL: u8 = 0x01;
-pub const LOG_ERROR: u8 = 0x02;
-pub const LOG_WARN: u8 = 0x03;
-pub const LOG_INFO: u8 = 0x04;
-pub const LOG_DEBUG: u8 = 0x05;
-pub const LOG_VERBOSE: u8 = 0x06;
+pub const LOG_LEVEL_FATAL: u8 = 0x01;
+pub const LOG_LEVEL_ERROR: u8 = 0x02;
+pub const LOG_LEVEL_WARN: u8 = 0x03;
+pub const LOG_LEVEL_INFO: u8 = 0x04;
+pub const LOG_LEVEL_DEBUG: u8 = 0x05;
+pub const LOG_LEVEL_VERBOSE: u8 = 0x06;
 
 #[inline]
 pub fn htyp2_cnti(htyp2: u32) -> u8 {
