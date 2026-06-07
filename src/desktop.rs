@@ -1,8 +1,65 @@
 use crate::dlt;
 use crate::dlt::error::ParseError;
+use crate::dlt::payload::{MESSAGE_TYPE, decode_message_type_info};
 use anyhow::{Result, anyhow};
 use eframe::egui;
+use std::ops::Range;
 use std::path::PathBuf;
+
+const TABLE_COL_TIMESTAMP: f32 = 140.0;
+const TABLE_COL_ECU: f32 = 70.0;
+const TABLE_COL_APID: f32 = 70.0;
+const TABLE_COL_CTID: f32 = 70.0;
+const TABLE_COL_TYPE: f32 = 140.0;
+const TABLE_ROW_HEIGHT: f32 = 20.0;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LogTableRow {
+    index: usize,
+    timestamp: String,
+    ecu: String,
+    apid: String,
+    ctid: String,
+    kind: String,
+    payload: String,
+}
+
+fn format_timestamp_ns(ns: u64) -> String {
+    let seconds = ns / 1_000_000_000;
+    let micros = (ns % 1_000_000_000) / 1_000;
+    format!("{}.{:06}", seconds, micros)
+}
+
+fn format_message_type(mstp: u8, mtin: u8) -> String {
+    let mstp_usize = mstp as usize;
+    let family = MESSAGE_TYPE.get(mstp_usize).copied().unwrap_or("");
+    let info = decode_message_type_info(mstp_usize, mtin as usize);
+
+    if family.is_empty() {
+        return format!("unknown({mstp},{mtin})");
+    }
+    if info.is_empty() {
+        return family.to_string();
+    }
+
+    format!("{family}/{info}")
+}
+
+fn display_field(value: &str) -> String {
+    if value.is_empty() {
+        "-".to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+fn display_payload(value: String) -> String {
+    if value.is_empty() {
+        "-".to_string()
+    } else {
+        value
+    }
+}
 
 #[derive(Debug)]
 enum RetainedDlt {
@@ -36,6 +93,35 @@ impl RetainedDlt {
         match self {
             Self::V1(dlt) => dlt.unique_ctids().len(),
             Self::V2(dlt) => dlt.unique_ctids().len(),
+        }
+    }
+
+    fn row(&self, index: usize) -> LogTableRow {
+        match self {
+            Self::V1(dlt) => LogTableRow {
+                index,
+                timestamp: format_timestamp_ns(dlt.storage_timestamp_ns(index)),
+                ecu: display_field(dlt.ecu(index)),
+                apid: display_field(dlt.apid(index)),
+                ctid: display_field(dlt.ctid(index)),
+                kind: format_message_type(
+                    dlt.message_type(index),
+                    dlt.message_type_info(index),
+                ),
+                payload: display_payload(dlt.payload_text(index)),
+            },
+            Self::V2(dlt) => LogTableRow {
+                index,
+                timestamp: format_timestamp_ns(dlt.storage_timestamp_ns(index)),
+                ecu: display_field(dlt.ecu(index)),
+                apid: display_field(dlt.apid(index)),
+                ctid: display_field(dlt.ctid(index)),
+                kind: format_message_type(
+                    dlt.message_type(index),
+                    dlt.message_type_info(index),
+                ),
+                payload: display_payload(dlt.payload_text(index)),
+            },
         }
     }
 }
@@ -72,6 +158,88 @@ impl RetainedDataSet {
     fn unique_ctid_count(&self) -> usize {
         self.dlt.unique_ctid_count()
     }
+
+    fn visible_rows(&self, range: Range<usize>) -> Vec<LogTableRow> {
+        let total_rows = self.message_count();
+        let start = range.start.min(total_rows);
+        let end = range.end.min(total_rows);
+        (start..end).map(|idx| self.dlt.row(idx)).collect()
+    }
+}
+
+fn render_log_table(ui: &mut egui::Ui, data: &RetainedDataSet) {
+    ui.separator();
+    ui.label("Log Table");
+
+    ui.horizontal(|ui| {
+        ui.add_sized(
+            [50.0, TABLE_ROW_HEIGHT],
+            egui::Label::new(egui::RichText::new("#").strong()),
+        );
+        ui.add_sized(
+            [TABLE_COL_TIMESTAMP, TABLE_ROW_HEIGHT],
+            egui::Label::new(egui::RichText::new("Timestamp").strong()),
+        );
+        ui.add_sized(
+            [TABLE_COL_ECU, TABLE_ROW_HEIGHT],
+            egui::Label::new(egui::RichText::new("ECU").strong()),
+        );
+        ui.add_sized(
+            [TABLE_COL_APID, TABLE_ROW_HEIGHT],
+            egui::Label::new(egui::RichText::new("APID").strong()),
+        );
+        ui.add_sized(
+            [TABLE_COL_CTID, TABLE_ROW_HEIGHT],
+            egui::Label::new(egui::RichText::new("CTID").strong()),
+        );
+        ui.add_sized(
+            [TABLE_COL_TYPE, TABLE_ROW_HEIGHT],
+            egui::Label::new(egui::RichText::new("Type").strong()),
+        );
+        ui.label(egui::RichText::new("Payload").strong());
+    });
+    ui.separator();
+
+    let total_rows = data.message_count();
+    if total_rows == 0 {
+        ui.label("No log rows available.");
+        return;
+    }
+
+    egui::ScrollArea::vertical()
+        .id_salt("desktop_log_table")
+        .auto_shrink([false, false])
+        .show_rows(ui, TABLE_ROW_HEIGHT, total_rows, |ui, row_range| {
+            for row in data.visible_rows(row_range) {
+                ui.horizontal(|ui| {
+                    ui.add_sized(
+                        [50.0, TABLE_ROW_HEIGHT],
+                        egui::Label::new(row.index.to_string()),
+                    );
+                    ui.add_sized(
+                        [TABLE_COL_TIMESTAMP, TABLE_ROW_HEIGHT],
+                        egui::Label::new(row.timestamp),
+                    );
+                    ui.add_sized(
+                        [TABLE_COL_ECU, TABLE_ROW_HEIGHT],
+                        egui::Label::new(row.ecu),
+                    );
+                    ui.add_sized(
+                        [TABLE_COL_APID, TABLE_ROW_HEIGHT],
+                        egui::Label::new(row.apid),
+                    );
+                    ui.add_sized(
+                        [TABLE_COL_CTID, TABLE_ROW_HEIGHT],
+                        egui::Label::new(row.ctid),
+                    );
+                    ui.add_sized(
+                        [TABLE_COL_TYPE, TABLE_ROW_HEIGHT],
+                        egui::Label::new(row.kind),
+                    );
+                    ui.label(row.payload);
+                });
+            }
+        });
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -247,6 +415,8 @@ impl eframe::App for DesktopShell {
                                 ));
                             }
                         }
+
+                        render_log_table(ui, data);
                     }
                 }
                 DesktopAppState::Error(message) => {
@@ -271,7 +441,9 @@ pub(crate) fn run_desktop_shell() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{DesktopAppState, DesktopModel, load_retained_dataset};
+    use super::{
+        DesktopAppState, DesktopModel, format_message_type, load_retained_dataset,
+    };
     use std::path::PathBuf;
 
     #[test]
@@ -308,5 +480,40 @@ mod tests {
 
         let result = load_retained_dataset(vec![path]);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn retained_visible_rows_are_slice_based() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "tests/data/testfile_control_messages.dlt",
+        );
+
+        let data = load_retained_dataset(vec![path]).expect("fixture should load");
+        let total = data.message_count();
+        assert!(total >= 2);
+
+        let rows = data.visible_rows(1..2);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].index, 1);
+        assert!(!rows[0].timestamp.is_empty());
+    }
+
+    #[test]
+    fn retained_visible_rows_clamp_out_of_bounds_ranges() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "tests/data/testfile_control_messages.dlt",
+        );
+
+        let data = load_retained_dataset(vec![path]).expect("fixture should load");
+        let total = data.message_count();
+        let rows = data.visible_rows(total..(total + 50));
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn message_type_format_uses_family_and_info_when_present() {
+        assert_eq!(format_message_type(0, 4), "log/info");
+        assert_eq!(format_message_type(3, 2), "control/response");
+        assert_eq!(format_message_type(3, 9), "control");
     }
 }
