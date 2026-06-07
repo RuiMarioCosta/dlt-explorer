@@ -61,9 +61,22 @@ impl Dlt {
 
             let scan = scan_frames(&mmap, file_idx as u16);
             all_errors.extend(scan.errors);
+            let default_storage_ecu = scan.default_storage_ecu;
+            let storage_ecu_overrides = scan.storage_ecu_overrides;
 
-            for frame in scan.frames {
+            let mut next_override = 0usize;
+            for (frame_idx, frame) in scan.frames.into_iter().enumerate() {
                 let msg = &mmap[frame.msg_start..frame.msg_start + frame.msg_len];
+
+                // Resolve this frame's storage ECU first so override cursor stays
+                // aligned even when message ECU is present and takes precedence.
+                let mut storage_ecu = default_storage_ecu;
+                if next_override < storage_ecu_overrides.len()
+                    && storage_ecu_overrides[next_override].0 == frame_idx
+                {
+                    storage_ecu = Some(storage_ecu_overrides[next_override].1);
+                    next_override += 1;
+                }
 
                 let hdr = match parse_v2_header(msg) {
                     Ok(hdr) => hdr,
@@ -85,14 +98,23 @@ impl Dlt {
                     Some(b) => std::str::from_utf8(b).unwrap_or(""),
                     None => "",
                 };
-                let ecu_str = match &hdr.ecu {
-                    Some(b) => std::str::from_utf8(b).unwrap_or(""),
-                    None => "",
+                let ecu_id = match &hdr.ecu {
+                    Some(b) => {
+                        let ecu_str = std::str::from_utf8(b).unwrap_or("");
+                        intern.insert(ecu_str)
+                    }
+                    None => match storage_ecu {
+                        Some(storage_ecu) => {
+                            let ecu_str = std::str::from_utf8(&storage_ecu).unwrap_or("");
+                            intern.insert(ecu_str)
+                        }
+                        None => intern.insert(""),
+                    },
                 };
 
                 apid.push(intern.insert(apid_str));
                 ctid.push(intern.insert(ctid_str));
-                ecu.push(intern.insert(ecu_str));
+                ecu.push(ecu_id);
                 session_id.push(hdr.session_id.unwrap_or(0));
                 storage_timestamp_ns.push(frame.storage_timestamp_ns);
                 message_timestamp_ns.push(hdr.message_timestamp_ns);
@@ -577,7 +599,7 @@ mod tests {
     }
 
     #[test]
-    fn v2_flags_cleared_returns_empty_sentinels() {
+    fn v2_flags_cleared_uses_storage_ecu_and_other_empty_sentinels() {
         let msg_bytes = V2MessageBuilder::new().build();
 
         let dir = tempfile::tempdir().unwrap();
@@ -592,8 +614,36 @@ mod tests {
         assert_eq!(dlt.len(), 1);
         assert_eq!(dlt.apid(0), "");
         assert_eq!(dlt.ctid(0), "");
-        assert_eq!(dlt.ecu(0), "");
+        assert_eq!(dlt.ecu(0), "ECU1");
         assert_eq!(dlt.session_id(0), 0);
+    }
+
+    #[test]
+    fn v2_message_ecu_takes_precedence_and_storage_fallback_tracks_overrides() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ecu_fallback_and_precedence.dlt");
+        {
+            let mut f = std::fs::File::create(&path).unwrap();
+            for msg in [
+                V2MessageBuilder::new().with_storage_ecu(b"ST01").build(),
+                V2MessageBuilder::new()
+                    .with_storage_ecu(b"ST02")
+                    .with_ecu("MS02")
+                    .build(),
+                V2MessageBuilder::new().with_storage_ecu(b"ST03").build(),
+                V2MessageBuilder::new().with_storage_ecu(b"ST01").build(),
+            ] {
+                f.write_all(&msg).unwrap();
+            }
+        }
+
+        let (dlt, errors) = Dlt::open(vec![path]).unwrap();
+        assert!(errors.is_empty());
+        assert_eq!(dlt.len(), 4);
+        assert_eq!(dlt.ecu(0), "ST01");
+        assert_eq!(dlt.ecu(1), "MS02");
+        assert_eq!(dlt.ecu(2), "ST03");
+        assert_eq!(dlt.ecu(3), "ST01");
     }
 
     #[test]

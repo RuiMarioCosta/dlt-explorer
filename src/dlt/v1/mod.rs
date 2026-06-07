@@ -429,7 +429,8 @@ mod tests {
         let path = dir.path().join("v1_ecu_combinations.dlt");
         let mut file = std::fs::File::create(&path).unwrap();
 
-        let cases: [([u8; 4], Option<[u8; 4]>, &str); 7] = [
+        type TestCases = ([u8; 4], Option<[u8; 4]>, &'static str);
+        let cases: [TestCases; 7] = [
             (*b"ST01", None, "ST01"),
             (*b"ST02", None, "ST02"),
             (*b"ST03", Some(*b"MS03"), "MS03"),

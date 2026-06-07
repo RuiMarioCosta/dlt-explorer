@@ -2,10 +2,9 @@ mod cmd_line_parser;
 pub mod dlt;
 mod gui;
 
-use anyhow::{Result, anyhow};
-use dlt::v2::Dlt;
-use gui::DltExplorer;
 use crate::dlt::payload::{MESSAGE_TYPE, decode_message_type_info};
+use anyhow::{Result, anyhow};
+use gui::DltExplorer;
 
 pub use cmd_line_parser::{Cli, Parser};
 
@@ -56,7 +55,7 @@ fn process_in_terminal(args: Cli) -> Result<()> {
         }
         print_terminal_rows_v1(&dlt, args.limit);
     } else {
-        let (dlt, errors) = Dlt::open(paths)?;
+        let (dlt, errors) = dlt::v2::Dlt::open(paths)?;
         if !errors.is_empty() {
             eprintln!("{} parse error(s) encountered", errors.len());
         }
