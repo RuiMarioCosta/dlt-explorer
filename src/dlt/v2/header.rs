@@ -10,8 +10,7 @@ pub struct ParsedHeader {
     pub session_id: Option<u32>,
     pub message_timestamp_ns: u64,
     pub message_type: u8,
-    pub log_level: u8,
-    pub privacy_level: Option<u8>,
+    pub message_type_info: u8,
     /// Byte offset of the payload start within the message slice.
     pub payload_offset: usize,
     /// Payload length in bytes.
@@ -33,7 +32,7 @@ pub(super) fn parse_v2_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind
 
     // MSIN + NOAR for verbose or control messages
     let mut message_type: u8 = 0;
-    let mut log_level: u8 = 0;
+    let mut message_type_info: u8 = 0;
 
     if cnti == CNTI_VERBOSE || cnti == CNTI_CONTROL {
         if offset + 2 > msg.len() {
@@ -41,7 +40,7 @@ pub(super) fn parse_v2_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind
         }
         let msin = msg[offset];
         message_type = msin_mstp(msin);
-        log_level = msin_mtin(msin);
+        message_type_info = msin_mtin(msin);
         offset += 2;
     }
 
@@ -69,7 +68,6 @@ pub(super) fn parse_v2_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind
     let mut ctid = None;
     let mut ecu = None;
     let mut session_id = None;
-    let mut privacy_level = None;
 
     // ECU ID (WEID) — length-prefixed
     if htyp2_has_weid(htyp2) {
@@ -175,7 +173,6 @@ pub(super) fn parse_v2_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind
         if offset >= msg.len() {
             return Err(ParseErrorKind::InvalidExtensionField);
         }
-        privacy_level = Some(msg[offset]);
         offset += 1;
     }
 
@@ -197,8 +194,7 @@ pub(super) fn parse_v2_header(msg: &[u8]) -> Result<ParsedHeader, ParseErrorKind
         session_id,
         message_timestamp_ns,
         message_type,
-        log_level,
-        privacy_level,
+        message_type_info,
         payload_offset,
         payload_len,
     })
@@ -220,7 +216,7 @@ mod tests {
         let len_pos = msg.len();
         msg.extend_from_slice(&0u16.to_be_bytes()); // placeholder
 
-        msg.push(build_msin(MESSAGE_TYPE_LOG, LOG_INFO)); // MSIN
+        msg.push(build_msin(MESSAGE_TYPE_LOG, LOG_LEVEL_INFO)); // MSIN
         msg.push(1); // NOAR = 1
 
         // TMSP2 (9 bytes)
@@ -246,7 +242,7 @@ mod tests {
         assert_eq!(header.apid, Some(*b"APP1"));
         assert_eq!(header.ctid, Some(*b"CTX1"));
         assert_eq!(header.message_type, MESSAGE_TYPE_LOG);
-        assert_eq!(header.log_level, LOG_INFO);
+        assert_eq!(header.message_type_info, LOG_LEVEL_INFO);
         assert_eq!(header.message_timestamp_ns, ts_ns);
         assert_eq!(header.payload_len, 4);
 
@@ -274,7 +270,7 @@ mod tests {
         let len_pos = msg.len();
         msg.extend_from_slice(&0u16.to_be_bytes()); // placeholder LEN
 
-        msg.push(build_msin(MESSAGE_TYPE_TRACE, LOG_WARN)); // MSIN
+        msg.push(build_msin(MESSAGE_TYPE_TRACE, LOG_LEVEL_WARN)); // MSIN
         msg.push(0); // NOAR
 
         let ts_ns = 42u64 * 1_000_000_000 + 999_999_999;
@@ -320,8 +316,7 @@ mod tests {
         assert_eq!(header.session_id, Some(0x12345678));
         assert_eq!(header.message_timestamp_ns, ts_ns);
         assert_eq!(header.message_type, MESSAGE_TYPE_TRACE);
-        assert_eq!(header.log_level, LOG_WARN);
-        assert_eq!(header.privacy_level, Some(7));
+        assert_eq!(header.message_type_info, LOG_LEVEL_WARN);
         assert_eq!(header.payload_len, 1);
     }
 
@@ -335,7 +330,7 @@ mod tests {
         let len_pos = msg.len();
         msg.extend_from_slice(&0u16.to_be_bytes());
 
-        msg.push(build_msin(MESSAGE_TYPE_LOG, LOG_DEBUG));
+        msg.push(build_msin(MESSAGE_TYPE_LOG, LOG_LEVEL_DEBUG));
         msg.push(0); // NOAR
 
         msg.extend_from_slice(&encode_tmsp2(0)); // TMSP2
@@ -348,9 +343,8 @@ mod tests {
         assert_eq!(header.apid, None);
         assert_eq!(header.ctid, None);
         assert_eq!(header.session_id, None);
-        assert_eq!(header.privacy_level, None);
         assert_eq!(header.message_type, MESSAGE_TYPE_LOG);
-        assert_eq!(header.log_level, LOG_DEBUG);
+        assert_eq!(header.message_type_info, LOG_LEVEL_DEBUG);
     }
 
     #[test]
@@ -375,7 +369,7 @@ mod tests {
         let len_pos = msg.len();
         msg.extend_from_slice(&0u16.to_be_bytes());
 
-        msg.push(build_msin(MESSAGE_TYPE_LOG, LOG_INFO));
+        msg.push(build_msin(MESSAGE_TYPE_LOG, LOG_LEVEL_INFO));
         msg.push(0);
         msg.extend_from_slice(&encode_tmsp2(0));
 
@@ -388,7 +382,6 @@ mod tests {
         msg[len_pos..len_pos + 2].copy_from_slice(&len.to_be_bytes());
 
         let header = parse_v2_header(&msg).unwrap();
-        assert_eq!(header.privacy_level, Some(3));
         // Parser succeeds — unknown fields would just be part of payload bytes
         assert_eq!(header.payload_len, 2);
     }
@@ -421,14 +414,14 @@ mod tests {
     }
 
     #[test]
-    fn log_levels_from_msin() {
+    fn message_type_info_from_msin() {
         for (mtin, label) in [
-            (LOG_FATAL, "FATAL"),
-            (LOG_ERROR, "ERROR"),
-            (LOG_WARN, "WARN"),
-            (LOG_INFO, "INFO"),
-            (LOG_DEBUG, "DEBUG"),
-            (LOG_VERBOSE, "VERBOSE"),
+            (LOG_LEVEL_FATAL, "FATAL"),
+            (LOG_LEVEL_ERROR, "ERROR"),
+            (LOG_LEVEL_WARN, "WARN"),
+            (LOG_LEVEL_INFO, "INFO"),
+            (LOG_LEVEL_DEBUG, "DEBUG"),
+            (LOG_LEVEL_VERBOSE, "VERBOSE"),
         ] {
             let htyp2 = build_htyp2(CNTI_VERBOSE, false, false, false, PROTOCOL_VERSION_2);
             let mut msg = Vec::new();
@@ -445,7 +438,7 @@ mod tests {
             msg[len_pos..len_pos + 2].copy_from_slice(&len.to_be_bytes());
 
             let header = parse_v2_header(&msg).unwrap();
-            assert_eq!(header.log_level, mtin, "failed for {label}");
+            assert_eq!(header.message_type_info, mtin, "failed for {label}");
         }
     }
 }

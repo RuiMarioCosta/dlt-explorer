@@ -190,7 +190,7 @@ impl Dlt {
         msin_mstp(self.msin[row])
     }
 
-    pub fn log_level(&self, row: usize) -> u8 {
+    pub fn message_type_info(&self, row: usize) -> u8 {
         msin_mtin(self.msin[row])
     }
 
@@ -266,7 +266,7 @@ mod tests {
     fn open_single_file_parses_messages() {
         let path = test_data_path("testfile_single_payloads.dlt");
         let (dlt, errors) = Dlt::open(vec![path]).unwrap();
-        assert!(dlt.len() > 0);
+        assert!(!dlt.is_empty());
         // Errors may occur for per-message issues, but open should succeed
         let _ = errors;
     }
@@ -276,14 +276,13 @@ mod tests {
         let path = test_data_path("testfile_control_messages.dlt");
         let (dlt, _) = Dlt::open(vec![path]).unwrap();
         assert!(!dlt.is_empty());
-        assert!(dlt.len() > 0);
     }
 
     #[test]
     fn row_accessors_return_values() {
         let path = test_data_path("testfile_single_payloads.dlt");
         let (dlt, _) = Dlt::open(vec![path]).unwrap();
-        assert!(dlt.len() > 0);
+        assert!(!dlt.is_empty());
         // Verify accessors don't panic for valid rows
         for row in 0..dlt.len() {
             let _ = dlt.apid(row);
@@ -292,7 +291,7 @@ mod tests {
             let _ = dlt.storage_timestamp_ns(row);
             let _ = dlt.message_timestamp_ns(row);
             let _ = dlt.message_type(row);
-            let _ = dlt.log_level(row);
+            let _ = dlt.message_type_info(row);
             let _ = dlt.session_id(row);
             let _ = dlt.payload_raw(row);
             let _ = dlt.payload_text(row);
@@ -355,7 +354,7 @@ mod tests {
         ];
         let (dlt, _) = Dlt::open(paths).unwrap();
         // Should have messages from both files
-        assert!(dlt.len() > 0);
+        assert!(!dlt.is_empty());
         // Payloads from second file should be accessible
         for row in 0..dlt.len() {
             let _ = dlt.payload_raw(row);
@@ -430,7 +429,8 @@ mod tests {
         let path = dir.path().join("v1_ecu_combinations.dlt");
         let mut file = std::fs::File::create(&path).unwrap();
 
-        let cases: [([u8; 4], Option<[u8; 4]>, &str); 7] = [
+        type TestCases = ([u8; 4], Option<[u8; 4]>, &'static str);
+        let cases: [TestCases; 7] = [
             (*b"ST01", None, "ST01"),
             (*b"ST02", None, "ST02"),
             (*b"ST03", Some(*b"MS03"), "MS03"),

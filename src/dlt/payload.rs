@@ -26,10 +26,18 @@ pub const DLT_SCOD_UTF8: u32 = 0x00008000;
 // Lookup tables
 // ---------------------------------------------------------------------------
 
-pub const MESSAGE_TYPE: [&str; 8] = ["log", "app_trace", "nw_trace", "control", "", "", "", ""];
-pub const LOG_INFO: [&str; 16] = [
-    "", "fatal", "error", "warn", "info", "debug", "verbose", "", "", "", "", "", "", "", "", "",
+pub const MESSAGE_TYPE: [&str; 4] = ["log", "app_trace", "nw_trace", "control"];
+pub const LOG_INFO: [&str; 7] = ["", "fatal", "error", "warn", "info", "debug", "verbose"];
+pub const TRACE_INFO: [&str; 6] = [
+    "",
+    "variable",
+    "function_in",
+    "function_out",
+    "state",
+    "vfb",
 ];
+pub const NETWORK_INFO: [&str; 7] = ["", "ipc", "can", "flexray", "most", "ethernet", "someip"];
+pub const CONTROL_INFO: [&str; 3] = ["", "request", "response"];
 pub const SERVICE_ID_NAME: [&str; 21] = [
     "",
     "set_log_level",
@@ -65,6 +73,20 @@ pub const RETURN_TYPE: [&str; 9] = [
     "no_matching_context_id",
 ];
 pub const DLT_SERVICE_ID_LAST_ENTRY: u8 = 0x15;
+
+/// Decode MTIN (Message Type Info) label using MSTP (Message Type).
+///
+/// `mstp` follows the DLT message family encoding:
+/// 0=log, 1=app_trace, 2=nw_trace, 3=control.
+pub fn decode_message_type_info(mstp: usize, mtin: usize) -> &'static str {
+    match mstp {
+        0 => LOG_INFO.get(mtin).copied().unwrap_or(""),
+        1 => TRACE_INFO.get(mtin).copied().unwrap_or(""),
+        2 => NETWORK_INFO.get(mtin).copied().unwrap_or(""),
+        3 => CONTROL_INFO.get(mtin).copied().unwrap_or(""),
+        _ => "",
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Shared payload decode functions
@@ -386,5 +408,22 @@ pub fn decode_control(data: &[u8], big_endian: bool) -> String {
 
 /// Format raw bytes as a space-separated hex dump.
 pub fn hex_dump(data: &[u8]) -> String {
-    data.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" ")
+    data.iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_message_type_info_by_family() {
+        assert_eq!(decode_message_type_info(0, 4), "info");
+        assert_eq!(decode_message_type_info(1, 2), "function_in");
+        assert_eq!(decode_message_type_info(2, 5), "ethernet");
+        assert_eq!(decode_message_type_info(3, 2), "response");
+        assert_eq!(decode_message_type_info(7, 1), "");
+    }
 }

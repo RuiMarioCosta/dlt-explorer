@@ -1,5 +1,5 @@
 use crate::dlt::v1::Dlt;
-use crate::dlt::payload::{LOG_INFO, MESSAGE_TYPE};
+use crate::dlt::payload::{decode_message_type_info, MESSAGE_TYPE};
 use iced::widget::{button, column, container, row, scrollable, text, Row};
 use iced::{Color, Element, Font, Length, Task};
 use std::sync::Arc;
@@ -13,7 +13,7 @@ pub(crate) struct DltRow {
     apid: String,
     ctid: String,
     message_type: String,
-    log_info: String,
+    message_type_info: String,
     payload: String,
 }
 
@@ -43,7 +43,7 @@ const COL_ECU: f32 = 80.0;
 const COL_APID: f32 = 80.0;
 const COL_CTID: f32 = 80.0;
 const COL_TYPE: f32 = 100.0;
-const COL_LOG: f32 = 100.0;
+const COL_TYPE_INFO: f32 = 100.0;
 
 impl DltExplorer {
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -130,7 +130,7 @@ fn dlt_to_rows(dlt: &Dlt) -> Vec<DltRow> {
             let seconds = (ts_ns / 1_000_000_000) as u32;
             let microseconds = ((ts_ns % 1_000_000_000) / 1_000) as i32;
             let mstp = dlt.message_type(i) as usize;
-            let mtin = dlt.log_level(i) as usize;
+            let mtin = dlt.message_type_info(i) as usize;
             DltRow {
                 index: i,
                 seconds,
@@ -139,7 +139,7 @@ fn dlt_to_rows(dlt: &Dlt) -> Vec<DltRow> {
                 apid: dlt.apid(i).to_string(),
                 ctid: dlt.ctid(i).to_string(),
                 message_type: MESSAGE_TYPE.get(mstp).copied().unwrap_or("").to_string(),
-                log_info: LOG_INFO.get(mtin).copied().unwrap_or("").to_string(),
+                message_type_info: decode_message_type_info(mstp, mtin).to_string(),
                 payload: dlt.payload_text(i),
             }
         })
@@ -204,7 +204,7 @@ fn table_header<'a>() -> Element<'a, Message> {
         .push(header_cell("App ID", COL_APID))
         .push(header_cell("Ctx ID", COL_CTID))
         .push(header_cell("Type", COL_TYPE))
-        .push(header_cell("Log Level", COL_LOG))
+        .push(header_cell("Type Info", COL_TYPE_INFO))
         .push(header_fill_cell("Payload"))
         .into()
 }
@@ -226,7 +226,7 @@ fn table_row<'a>(r: &DltRow) -> Element<'a, Message> {
             .push(cell(r.apid.clone(), COL_APID))
             .push(cell(r.ctid.clone(), COL_CTID))
             .push(cell(r.message_type.clone(), COL_TYPE))
-            .push(cell(r.log_info.clone(), COL_LOG))
+                .push(cell(r.message_type_info.clone(), COL_TYPE_INFO))
             .push(fill_cell(r.payload.clone())),
     )
     .style(move |_theme: &iced::Theme| container::Style {
@@ -246,5 +246,14 @@ mod tests {
         assert!(explorer.rows.is_empty());
         assert!(explorer.error.is_none());
         assert!(!explorer.loading);
+    }
+
+    #[test]
+    fn decode_type_info_by_message_family() {
+        assert_eq!(decode_message_type_info(0, 4), "info");
+        assert_eq!(decode_message_type_info(1, 2), "function_in");
+        assert_eq!(decode_message_type_info(2, 5), "ethernet");
+        assert_eq!(decode_message_type_info(3, 2), "response");
+        assert_eq!(decode_message_type_info(7, 1), "");
     }
 }

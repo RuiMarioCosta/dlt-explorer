@@ -187,16 +187,16 @@ mod tests {
 
     #[test]
     fn verbose_floa32() {
-        let payload = make_floa32(3.14);
+        let payload = make_floa32(1.23);
         let result = decode_payload(CNTI_VERBOSE, &payload);
-        assert!(result.starts_with("3.14"), "got: {result}");
+        assert!(result.starts_with("1.23"), "got: {result}");
     }
 
     #[test]
     fn verbose_floa64() {
-        let payload = make_floa64(2.718281828);
+        let payload = make_floa64(1.23);
         let result = decode_payload(CNTI_VERBOSE, &payload);
-        assert!(result.starts_with("2.718281828"), "got: {result}");
+        assert!(result.starts_with("1.23"), "got: {result}");
     }
 
     #[test]
@@ -222,12 +222,12 @@ mod tests {
         let mut payload = Vec::new();
         payload.extend_from_slice(&make_uint32(42));
         payload.extend_from_slice(&make_strg_utf8("hello"));
-        payload.extend_from_slice(&make_floa32(3.14));
+        payload.extend_from_slice(&make_floa32(1.23));
         let result = decode_payload(CNTI_VERBOSE, &payload);
         let parts: Vec<&str> = result.split(' ').collect();
         assert_eq!(parts[0], "42");
         assert_eq!(parts[1], "hello");
-        assert!(parts[2].starts_with("3.14"), "got: {}", parts[2]);
+        assert!(parts[2].starts_with("1.23"), "got: {}", parts[2]);
     }
 
     #[test]

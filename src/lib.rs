@@ -2,8 +2,8 @@ mod cmd_line_parser;
 pub mod dlt;
 mod gui;
 
+use crate::dlt::payload::{MESSAGE_TYPE, decode_message_type_info};
 use anyhow::{Result, anyhow};
-use dlt::v2::Dlt;
 use gui::DltExplorer;
 
 pub use cmd_line_parser::{Cli, Parser};
@@ -53,16 +53,72 @@ fn process_in_terminal(args: Cli) -> Result<()> {
         if !errors.is_empty() {
             eprintln!("{} parse error(s) encountered", errors.len());
         }
-        println!("{:?}", dlt);
+        print_terminal_rows_v1(&dlt, args.limit);
     } else {
-        let (dlt, errors) = Dlt::open(paths)?;
+        let (dlt, errors) = dlt::v2::Dlt::open(paths)?;
         if !errors.is_empty() {
             eprintln!("{} parse error(s) encountered", errors.len());
         }
-        println!("{:?}", dlt);
+        print_terminal_rows_v2(&dlt, args.limit);
     }
 
     Ok(())
+}
+
+fn print_terminal_rows_v1(dlt: &dlt::v1::Dlt, limit: Option<usize>) {
+    println!("idx\ttype\ttype_info\tecu\tapid\tctid\tpayload");
+    let total = dlt.len();
+    let rows_to_print = limit.unwrap_or(total).min(total);
+    for i in 0..rows_to_print {
+        let mstp = dlt.message_type(i) as usize;
+        let mtin = dlt.message_type_info(i) as usize;
+        let msg_type = MESSAGE_TYPE.get(mstp).copied().unwrap_or("");
+        let type_info = decode_message_type_info(mstp, mtin);
+        println!(
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            i,
+            msg_type,
+            type_info,
+            dlt.ecu(i),
+            dlt.apid(i),
+            dlt.ctid(i),
+            dlt.payload_text(i)
+        );
+    }
+    if rows_to_print < total {
+        println!(
+            "... truncated: showing {} of {} rows (use --limit to adjust)",
+            rows_to_print, total
+        );
+    }
+}
+
+fn print_terminal_rows_v2(dlt: &dlt::v2::Dlt, limit: Option<usize>) {
+    println!("idx\ttype\ttype_info\tecu\tapid\tctid\tpayload");
+    let total = dlt.len();
+    let rows_to_print = limit.unwrap_or(total).min(total);
+    for i in 0..rows_to_print {
+        let mstp = dlt.message_type(i) as usize;
+        let mtin = dlt.message_type_info(i) as usize;
+        let msg_type = MESSAGE_TYPE.get(mstp).copied().unwrap_or("");
+        let type_info = decode_message_type_info(mstp, mtin);
+        println!(
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            i,
+            msg_type,
+            type_info,
+            dlt.ecu(i),
+            dlt.apid(i),
+            dlt.ctid(i),
+            dlt.payload_text(i)
+        );
+    }
+    if rows_to_print < total {
+        println!(
+            "... truncated: showing {} of {} rows (use --limit to adjust)",
+            rows_to_print, total
+        );
+    }
 }
 
 #[cfg(test)]
@@ -77,6 +133,7 @@ mod tests {
             filter: None,
             terminal: true,
             sort: true,
+            limit: None,
         };
 
         let result = process_dlt(args);
@@ -94,6 +151,7 @@ mod tests {
             filter: None,
             terminal: true,
             sort: true,
+            limit: None,
         };
 
         let result = process_dlt(args);

@@ -23,6 +23,18 @@ The header type field. HTYP is the 1-byte v1 version; HTYP2 is the 4-byte v2 ver
 Content Info — a 2-bit field in HTYP2 indicating whether the message is verbose (0), non-verbose (1), or control (2).
 _Avoid_: message mode, verbosity flag
 
+**MSIN**:
+Message Info — a 1-byte field in the extended header that encodes VERB, MSTP, and MTIN.
+_Avoid_: log level byte
+
+**MSTP**:
+Message Type — a 3-bit value encoded in MSIN that selects the family (log, app_trace, nw_trace, control).
+_Avoid_: message category, log type
+
+**MTIN (Message Type Info)**:
+A 4-bit value encoded in MSIN whose meaning depends on MSTP (for example log level for log messages, service direction for control messages).
+_Avoid_: log level (as a generic term)
+
 **ECU**:
 Electronic Control Unit — the source device identifier. A 4-byte null-padded ASCII string.
 _Avoid_: device, node
