@@ -75,6 +75,13 @@ impl StructuredFilter {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct RenderedTextSearch {
+    query: String,
+    match_positions: Vec<usize>,
+    active_match_position: Option<usize>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct IndexLayer {
     visible_indices: Vec<usize>,
@@ -130,6 +137,10 @@ impl IndexLayer {
             .copied()
             .map(|idx| dlt.row(idx))
             .collect()
+    }
+
+    fn visible_index_at(&self, position: usize) -> Option<usize> {
+        self.visible_indices.get(position).copied()
     }
 }
 
@@ -239,6 +250,20 @@ impl RetainedDlt {
             },
         }
     }
+
+    fn rendered_row_text(&self, index: usize) -> String {
+        let row = self.row(index);
+        format!(
+            "{} {} {} {} {} {} {}",
+            row.index,
+            row.timestamp,
+            row.ecu,
+            row.apid,
+            row.ctid,
+            row.kind,
+            row.payload
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -249,6 +274,9 @@ struct RetainedDataSet {
     dlt: RetainedDlt,
     index: IndexLayer,
     active_filter: StructuredFilter,
+    rendered_search: RenderedTextSearch,
+    selected_visible_row: Option<usize>,
+    pending_scroll_to_selected: bool,
 }
 
 impl RetainedDataSet {
@@ -282,6 +310,7 @@ impl RetainedDataSet {
 
     fn rebuild_index(&mut self) {
         self.index = IndexLayer::from_filter(&self.dlt, &self.active_filter);
+        self.rebuild_rendered_search();
     }
 
     fn clear_filter(&mut self) {
@@ -291,6 +320,165 @@ impl RetainedDataSet {
 
     fn visible_rows(&self, range: Range<usize>) -> Vec<LogTableRow> {
         self.index.visible_rows(&self.dlt, range)
+    }
+
+    fn set_rendered_search_query(&mut self, query: String) {
+        self.rendered_search.query = query;
+        self.rebuild_rendered_search();
+    }
+
+    fn rendered_search_query_mut(&mut self) -> &mut String {
+        &mut self.rendered_search.query
+    }
+
+    fn rendered_search_match_count(&self) -> usize {
+        self.rendered_search.match_positions.len()
+    }
+
+    fn rendered_search_active_ordinal(&self) -> Option<usize> {
+        let active_position = self.rendered_search.active_match_position?;
+        self.rendered_search
+            .match_positions
+            .iter()
+            .position(|&pos| pos == active_position)
+            .map(|idx| idx + 1)
+    }
+
+    fn select_next_rendered_match(&mut self) -> bool {
+        let total = self.rendered_search.match_positions.len();
+        if total == 0 {
+            return false;
+        }
+
+        let current_idx = self
+            .rendered_search
+            .active_match_position
+            .and_then(|active| {
+                self.rendered_search
+                    .match_positions
+                    .iter()
+                    .position(|&pos| pos == active)
+            })
+            .unwrap_or(0);
+        let next_idx = (current_idx + 1) % total;
+        self.apply_active_match_by_index(next_idx)
+    }
+
+    fn select_previous_rendered_match(&mut self) -> bool {
+        let total = self.rendered_search.match_positions.len();
+        if total == 0 {
+            return false;
+        }
+
+        let current_idx = self
+            .rendered_search
+            .active_match_position
+            .and_then(|active| {
+                self.rendered_search
+                    .match_positions
+                    .iter()
+                    .position(|&pos| pos == active)
+            })
+            .unwrap_or(0);
+        let prev_idx = (current_idx + total - 1) % total;
+        self.apply_active_match_by_index(prev_idx)
+    }
+
+    fn selected_row_index(&self) -> Option<usize> {
+        let selected_pos = self.selected_visible_row?;
+        self.index.visible_index_at(selected_pos)
+    }
+
+    fn selected_visible_row(&self) -> Option<usize> {
+        self.selected_visible_row
+    }
+
+    fn take_pending_scroll_to_selected(&mut self) -> bool {
+        let pending = self.pending_scroll_to_selected;
+        self.pending_scroll_to_selected = false;
+        pending
+    }
+
+    fn select_visible_row(&mut self, position: usize, request_scroll: bool) {
+        if self.index.visible_index_at(position).is_none() {
+            return;
+        }
+
+        self.selected_visible_row = Some(position);
+        if request_scroll {
+            self.pending_scroll_to_selected = true;
+        }
+        if self.rendered_search.query.is_empty() {
+            self.rendered_search.active_match_position = None;
+            return;
+        }
+
+        if self
+            .rendered_search
+            .match_positions
+            .contains(&position)
+        {
+            self.rendered_search.active_match_position = Some(position);
+        }
+    }
+
+    fn rebuild_rendered_search(&mut self) {
+        let query = self.rendered_search.query.clone();
+        if query.is_empty() {
+            self.rendered_search.match_positions.clear();
+            self.rendered_search.active_match_position = None;
+            if self
+                .selected_visible_row
+                .and_then(|pos| self.index.visible_index_at(pos))
+                .is_none()
+            {
+                self.selected_visible_row = None;
+            }
+            return;
+        }
+
+        let mut match_positions = Vec::new();
+        for (visible_position, &row_index) in
+            self.index.visible_indices.iter().enumerate()
+        {
+            let rendered = self.dlt.rendered_row_text(row_index);
+            if contains_ignore_case(rendered.as_str(), query.as_str()) {
+                match_positions.push(visible_position);
+            }
+        }
+
+        self.rendered_search.match_positions = match_positions;
+        if self.rendered_search.match_positions.is_empty() {
+            self.rendered_search.active_match_position = None;
+            self.selected_visible_row = None;
+            return;
+        }
+
+        let preferred = self
+            .selected_visible_row
+            .filter(|pos| self.rendered_search.match_positions.contains(pos))
+            .or_else(|| {
+                self.rendered_search
+                    .active_match_position
+                    .filter(|pos| self.rendered_search.match_positions.contains(pos))
+            })
+            .unwrap_or(self.rendered_search.match_positions[0]);
+
+        self.selected_visible_row = Some(preferred);
+        self.rendered_search.active_match_position = Some(preferred);
+    }
+
+    fn apply_active_match_by_index(&mut self, match_index: usize) -> bool {
+        let Some(&visible_position) =
+            self.rendered_search.match_positions.get(match_index)
+        else {
+            return false;
+        };
+
+        self.rendered_search.active_match_position = Some(visible_position);
+        self.selected_visible_row = Some(visible_position);
+        self.pending_scroll_to_selected = true;
+        true
     }
 }
 
@@ -343,7 +531,58 @@ fn render_structured_filter_controls(ui: &mut egui::Ui, data: &mut RetainedDataS
     ));
 }
 
-fn render_log_table(ui: &mut egui::Ui, data: &RetainedDataSet) {
+fn render_rendered_search_controls(ui: &mut egui::Ui, data: &mut RetainedDataSet) {
+    ui.separator();
+    ui.label("Rendered Text Search");
+
+    let mut query_changed = false;
+    let mut clear_clicked = false;
+    let mut prev_clicked = false;
+    let mut next_clicked = false;
+
+    ui.horizontal(|ui| {
+        query_changed = ui
+            .add(
+                egui::TextEdit::singleline(data.rendered_search_query_mut())
+                    .hint_text("Search rendered message text"),
+            )
+            .changed();
+
+        clear_clicked = ui.button("Clear").clicked();
+        prev_clicked = ui.button("Prev").clicked();
+        next_clicked = ui.button("Next").clicked();
+    });
+
+    if query_changed {
+        let query = data.rendered_search.query.clone();
+        data.set_rendered_search_query(query);
+    }
+
+    if clear_clicked {
+        data.set_rendered_search_query(String::new());
+    }
+
+    if prev_clicked {
+        data.select_previous_rendered_match();
+    }
+    if next_clicked {
+        data.select_next_rendered_match();
+    }
+
+    let match_count = data.rendered_search_match_count();
+    if match_count == 0 {
+        ui.label("Matches: 0");
+    } else {
+        let active = data.rendered_search_active_ordinal().unwrap_or(1);
+        ui.label(format!("Matches: {} (active {}/{})", match_count, active, match_count));
+    }
+
+    if let Some(selected) = data.selected_row_index() {
+        ui.label(format!("Selected row: {}", selected));
+    }
+}
+
+fn render_log_table_with_navigation(ui: &mut egui::Ui, data: &mut RetainedDataSet) {
     ui.separator();
     ui.label("Log Table");
 
@@ -382,15 +621,29 @@ fn render_log_table(ui: &mut egui::Ui, data: &RetainedDataSet) {
         return;
     }
 
+    let selected_visible_row = data.selected_visible_row();
+    let should_scroll_to_selection = data.take_pending_scroll_to_selected();
+
     egui::ScrollArea::vertical()
         .id_salt("desktop_log_table")
         .auto_shrink([false, false])
         .show_rows(ui, TABLE_ROW_HEIGHT, total_rows, |ui, row_range| {
-            for row in data.visible_rows(row_range) {
-                ui.horizontal(|ui| {
+            for (offset, row) in data.visible_rows(row_range.clone()).into_iter().enumerate() {
+                let visible_position = row_range.start + offset;
+                let is_selected = selected_visible_row == Some(visible_position);
+
+                let response = ui.horizontal(|ui| {
                     ui.add_sized(
                         [50.0, TABLE_ROW_HEIGHT],
-                        egui::Label::new(row.index.to_string()),
+                        egui::Label::new(
+                            egui::RichText::new(row.index.to_string())
+                                .strong()
+                                .background_color(if is_selected {
+                                    egui::Color32::from_rgb(34, 74, 125)
+                                } else {
+                                    egui::Color32::TRANSPARENT
+                                }),
+                        ),
                     );
                     ui.add_sized(
                         [TABLE_COL_TIMESTAMP, TABLE_ROW_HEIGHT],
@@ -414,6 +667,14 @@ fn render_log_table(ui: &mut egui::Ui, data: &RetainedDataSet) {
                     );
                     ui.label(row.payload);
                 });
+
+                if is_selected && should_scroll_to_selection {
+                    ui.scroll_to_rect(response.response.rect, Some(egui::Align::Center));
+                }
+
+                if response.response.clicked() {
+                    data.select_visible_row(visible_position, false);
+                }
             }
         });
 }
@@ -499,6 +760,9 @@ fn load_retained_dataset(paths: Vec<PathBuf>) -> Result<RetainedDataSet> {
                 visible_indices: Vec::new(),
             },
             active_filter: StructuredFilter::default(),
+            rendered_search: RenderedTextSearch::default(),
+            selected_visible_row: None,
+            pending_scroll_to_selected: false,
         };
         data.rebuild_index();
         Ok(data)
@@ -513,6 +777,9 @@ fn load_retained_dataset(paths: Vec<PathBuf>) -> Result<RetainedDataSet> {
                 visible_indices: Vec::new(),
             },
             active_filter: StructuredFilter::default(),
+            rendered_search: RenderedTextSearch::default(),
+            selected_visible_row: None,
+            pending_scroll_to_selected: false,
         };
         data.rebuild_index();
         Ok(data)
@@ -605,7 +872,8 @@ impl eframe::App for DesktopShell {
                         }
 
                         render_structured_filter_controls(ui, data);
-                        render_log_table(ui, data);
+                        render_rendered_search_controls(ui, data);
+                        render_log_table_with_navigation(ui, data);
                     }
                 }
                 DesktopAppState::Error(message) => {
@@ -749,5 +1017,47 @@ mod tests {
         assert_eq!(format_message_type(0, 4), "log/info");
         assert_eq!(format_message_type(3, 2), "control/response");
         assert_eq!(format_message_type(3, 9), "control");
+    }
+
+    #[test]
+    fn rendered_text_search_matches_user_visible_row_text() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "tests/data/testfile_number_and_text.dlt",
+        );
+
+        let mut data = load_retained_dataset(vec![path]).expect("fixture should load");
+        let first_row = data
+            .visible_rows(0..1)
+            .into_iter()
+            .next()
+            .expect("fixture should contain one row");
+        data.set_rendered_search_query(first_row.timestamp.clone());
+
+        assert!(data.rendered_search_match_count() > 0);
+        assert!(data.selected_row_index().is_some());
+    }
+
+    #[test]
+    fn rendered_text_search_navigation_updates_selected_row() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "tests/data/testfile_control_messages.dlt",
+        );
+
+        let mut data = load_retained_dataset(vec![path]).expect("fixture should load");
+        data.set_rendered_search_query("control".to_string());
+
+        let total_matches = data.rendered_search_match_count();
+        assert!(total_matches > 0);
+        let first_selected = data.selected_row_index();
+
+        assert!(data.select_next_rendered_match());
+        let next_selected = data.selected_row_index();
+        assert!(next_selected.is_some());
+        if total_matches > 1 {
+            assert_ne!(first_selected, next_selected);
+        }
+
+        assert!(data.select_previous_rendered_match());
+        assert!(data.selected_row_index().is_some());
     }
 }
