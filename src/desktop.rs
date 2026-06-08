@@ -88,8 +88,12 @@ struct IndexLayer {
 }
 
 impl IndexLayer {
-    fn from_filter(dlt: &RetainedDlt, filter: &StructuredFilter) -> Self {
-        let visible_indices = (0..dlt.len())
+    fn from_filter_and_search(
+        dlt: &RetainedDlt,
+        filter: &StructuredFilter,
+        rendered_search_query: &str,
+    ) -> Self {
+        let structured_filtered_indices: Vec<usize> = (0..dlt.len())
             .filter(|&index| {
                 let ecu_matches = contains_ignore_case(
                     dlt.ecu(index),
@@ -113,6 +117,20 @@ impl IndexLayer {
                 );
 
                 ecu_matches && apid_matches && ctid_matches && kind_matches
+            })
+            .collect();
+
+        if rendered_search_query.is_empty() {
+            return Self {
+                visible_indices: structured_filtered_indices,
+            };
+        }
+
+        let visible_indices = structured_filtered_indices
+            .into_iter()
+            .filter(|&index| {
+                let rendered = dlt.rendered_row_text(index);
+                contains_ignore_case(rendered.as_str(), rendered_search_query)
             })
             .collect();
 
@@ -141,6 +159,10 @@ impl IndexLayer {
 
     fn visible_index_at(&self, position: usize) -> Option<usize> {
         self.visible_indices.get(position).copied()
+    }
+
+    fn position_for_index(&self, index: usize) -> Option<usize> {
+        self.visible_indices.iter().position(|&value| value == index)
     }
 }
 
@@ -309,8 +331,13 @@ impl RetainedDataSet {
     }
 
     fn rebuild_index(&mut self) {
-        self.index = IndexLayer::from_filter(&self.dlt, &self.active_filter);
-        self.rebuild_rendered_search();
+        let previous_selected_index = self.selected_row_index();
+        self.index = IndexLayer::from_filter_and_search(
+            &self.dlt,
+            &self.active_filter,
+            self.rendered_search.query.as_str(),
+        );
+        self.rebuild_rendered_search(previous_selected_index);
     }
 
     fn clear_filter(&mut self) {
@@ -324,7 +351,7 @@ impl RetainedDataSet {
 
     fn set_rendered_search_query(&mut self, query: String) {
         self.rendered_search.query = query;
-        self.rebuild_rendered_search();
+        self.rebuild_index();
     }
 
     fn rendered_search_query_mut(&mut self) -> &mut String {
@@ -422,32 +449,18 @@ impl RetainedDataSet {
         }
     }
 
-    fn rebuild_rendered_search(&mut self) {
-        let query = self.rendered_search.query.clone();
-        if query.is_empty() {
+    fn rebuild_rendered_search(&mut self, previous_selected_index: Option<usize>) {
+        if self.rendered_search.query.is_empty() {
             self.rendered_search.match_positions.clear();
             self.rendered_search.active_match_position = None;
-            if self
-                .selected_visible_row
-                .and_then(|pos| self.index.visible_index_at(pos))
-                .is_none()
-            {
-                self.selected_visible_row = None;
-            }
+
+            self.selected_visible_row = previous_selected_index
+                .and_then(|selected| self.index.position_for_index(selected));
             return;
         }
 
-        let mut match_positions = Vec::new();
-        for (visible_position, &row_index) in
-            self.index.visible_indices.iter().enumerate()
-        {
-            let rendered = self.dlt.rendered_row_text(row_index);
-            if contains_ignore_case(rendered.as_str(), query.as_str()) {
-                match_positions.push(visible_position);
-            }
-        }
-
-        self.rendered_search.match_positions = match_positions;
+        self.rendered_search.match_positions =
+            (0..self.index.visible_count()).collect();
         if self.rendered_search.match_positions.is_empty() {
             self.rendered_search.active_match_position = None;
             self.selected_visible_row = None;
@@ -455,14 +468,14 @@ impl RetainedDataSet {
         }
 
         let preferred = self
-            .selected_visible_row
-            .filter(|pos| self.rendered_search.match_positions.contains(pos))
+            .index
+            .position_for_index(previous_selected_index.unwrap_or(usize::MAX))
             .or_else(|| {
                 self.rendered_search
                     .active_match_position
-                    .filter(|pos| self.rendered_search.match_positions.contains(pos))
+                    .filter(|&pos| pos < self.rendered_search.match_positions.len())
             })
-            .unwrap_or(self.rendered_search.match_positions[0]);
+            .unwrap_or(0);
 
         self.selected_visible_row = Some(preferred);
         self.rendered_search.active_match_position = Some(preferred);
@@ -617,7 +630,7 @@ fn render_log_table_with_navigation(ui: &mut egui::Ui, data: &mut RetainedDataSe
 
     let total_rows = data.visible_message_count();
     if total_rows == 0 {
-        ui.label("No log rows match the structured filter.");
+        ui.label("No log rows match the active query.");
         return;
     }
 
@@ -1059,5 +1072,86 @@ mod tests {
 
         assert!(data.select_previous_rendered_match());
         assert!(data.selected_row_index().is_some());
+    }
+
+    #[test]
+    fn combined_query_pipeline_restricts_visible_rows() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "tests/data/testfile_control_messages.dlt",
+        );
+
+        let mut data = load_retained_dataset(vec![path]).expect("fixture should load");
+        data.active_filter = StructuredFilter {
+            kind_contains: "control".to_string(),
+            ..StructuredFilter::default()
+        };
+        data.rebuild_index();
+        let filtered_count = data.visible_message_count();
+        assert!(filtered_count > 0);
+
+        let marker = data
+            .visible_rows(0..1)
+            .into_iter()
+            .next()
+            .expect("at least one filtered row")
+            .timestamp;
+
+        data.set_rendered_search_query(marker.clone());
+        let combined_count = data.visible_message_count();
+        assert!(combined_count > 0);
+        assert!(combined_count <= filtered_count);
+
+        for row in data.visible_rows(0..combined_count) {
+            let rendered = data.dlt.rendered_row_text(row.index);
+            assert!(rendered.to_ascii_lowercase().contains(&marker.to_ascii_lowercase()));
+        }
+    }
+
+    #[test]
+    fn combined_query_handles_empty_results_and_transitions() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "tests/data/testfile_control_messages.dlt",
+        );
+
+        let mut data = load_retained_dataset(vec![path]).expect("fixture should load");
+        data.active_filter = StructuredFilter {
+            kind_contains: "control".to_string(),
+            ..StructuredFilter::default()
+        };
+        data.rebuild_index();
+        let filtered_count = data.visible_message_count();
+        assert!(filtered_count > 0);
+
+        data.set_rendered_search_query("no-such-rendered-text-token".to_string());
+        assert_eq!(data.visible_message_count(), 0);
+        assert_eq!(data.rendered_search_match_count(), 0);
+        assert!(data.selected_row_index().is_none());
+
+        data.set_rendered_search_query(String::new());
+        assert_eq!(data.visible_message_count(), filtered_count);
+    }
+
+    #[test]
+    fn combined_query_preserves_selection_when_row_stays_visible() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "tests/data/testfile_control_messages.dlt",
+        );
+
+        let mut data = load_retained_dataset(vec![path]).expect("fixture should load");
+        data.active_filter = StructuredFilter {
+            kind_contains: "control".to_string(),
+            ..StructuredFilter::default()
+        };
+        data.rebuild_index();
+
+        let selected_position = if data.visible_message_count() > 1 { 1 } else { 0 };
+        data.select_visible_row(selected_position, false);
+        let selected_index = data.selected_row_index().expect("selection should exist");
+        let selected_timestamp = data.dlt.row(selected_index).timestamp;
+
+        data.set_rendered_search_query(selected_timestamp);
+
+        assert_eq!(data.selected_row_index(), Some(selected_index));
+        assert!(data.visible_message_count() > 0);
     }
 }
