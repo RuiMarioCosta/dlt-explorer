@@ -243,8 +243,8 @@ impl RetainedDataSet {
         self.rebuild_index();
     }
 
-    pub(crate) fn rendered_search_query_mut(&mut self) -> &mut String {
-        &mut self.rendered_search.query
+    pub(crate) fn rendered_search_query(&self) -> &str {
+        self.rendered_search.query.as_str()
     }
 
     pub(crate) fn rendered_search_match_count(&self) -> usize {
