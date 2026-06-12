@@ -424,6 +424,57 @@ mod tests {
     }
 
     #[test]
+    fn combined_query_falls_back_to_first_visible_row_when_selected_row_disappears() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("selection_fallback_structured_filter.dlt");
+        let mut file = std::fs::File::create(&path).unwrap();
+        write_v1_frame(&mut file, 1, *b"ECU1", Some(*b"ECU1"));
+        write_v1_frame(&mut file, 2, *b"ECU2", Some(*b"ECU2"));
+        write_v1_frame(&mut file, 3, *b"ECU3", Some(*b"ECU3"));
+        file.flush().unwrap();
+
+        let mut data = load_retained_dataset(vec![path]).expect("fixture should load");
+        assert_eq!(data.visible_message_count(), 3);
+
+        data.select_visible_row(1, false);
+        assert_eq!(data.selected_row_index(), Some(1));
+
+        data.set_structured_filter(StructuredFilter {
+            ecu_contains: "ECU1".to_string(),
+            ..StructuredFilter::default()
+        });
+
+        assert_eq!(data.visible_message_count(), 1);
+        assert_eq!(data.selected_row_index(), Some(0));
+        assert_eq!(data.selected_visible_row(), Some(0));
+    }
+
+    #[test]
+    fn rendered_search_navigation_and_scroll_remain_consistent_after_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("selection_fallback_rendered_search.dlt");
+        let mut file = std::fs::File::create(&path).unwrap();
+        write_v1_frame(&mut file, 1, *b"ECU1", Some(*b"ECU1"));
+        write_v1_frame(&mut file, 2, *b"ECU2", Some(*b"ECU2"));
+        write_v1_frame(&mut file, 3, *b"ECU3", Some(*b"ECU3"));
+        file.flush().unwrap();
+
+        let mut data = load_retained_dataset(vec![path]).expect("fixture should load");
+        data.set_rendered_search_query("ECU".to_string());
+        data.select_visible_row(2, false);
+        assert_eq!(data.selected_row_index(), Some(2));
+
+        data.set_rendered_search_query("ECU1".to_string());
+
+        assert_eq!(data.visible_message_count(), 1);
+        assert_eq!(data.selected_row_index(), Some(0));
+        assert_eq!(data.rendered_search_active_ordinal(), Some(1));
+
+        assert!(data.select_next_rendered_match());
+        assert!(data.take_pending_scroll_to_selected());
+    }
+
+    #[test]
     fn rendered_text_search_refines_structured_filter_instead_of_widening_it() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("query_pipeline_ordering.dlt");
