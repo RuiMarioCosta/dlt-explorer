@@ -23,9 +23,15 @@ mod tests {
         let mut model = DesktopModel::default();
 
         model.apply_intent(DesktopIntent::OpenFilesRequested);
+        let generation = model
+            .active_load_generation()
+            .expect("load generation should exist");
         assert_eq!(model.state(), &DesktopAppState::Loading);
 
-        model.apply_intent(DesktopIntent::LoadFailed("boom".to_string()));
+        model.apply_intent(DesktopIntent::LoadFailed {
+            generation,
+            message: "boom".to_string(),
+        });
         assert_eq!(model.state(), &DesktopAppState::Error("boom".to_string()));
 
         model.reset_idle();
@@ -43,7 +49,13 @@ mod tests {
         assert_eq!(model.state(), &DesktopAppState::Idle);
 
         model.apply_intent(DesktopIntent::OpenFilesRequested);
-        model.apply_intent(DesktopIntent::LoadFailed("boom".to_string()));
+        let generation = model
+            .active_load_generation()
+            .expect("load generation should exist");
+        model.apply_intent(DesktopIntent::LoadFailed {
+            generation,
+            message: "boom".to_string(),
+        });
         assert_eq!(model.state(), &DesktopAppState::Error("boom".to_string()));
 
         model.apply_intent(DesktopIntent::ResetRequested);
@@ -60,7 +72,11 @@ mod tests {
         let data = load_retained_dataset(vec![path]).expect("fixture should load");
         let total = data.message_count();
 
-        model.apply_intent(DesktopIntent::LoadSucceeded(data));
+        model.apply_intent(DesktopIntent::OpenFilesRequested);
+        let generation = model
+            .active_load_generation()
+            .expect("load generation should exist");
+        model.apply_intent(DesktopIntent::LoadSucceeded { generation, data });
         assert_eq!(model.state(), &DesktopAppState::Loaded);
 
         model.apply_intent(DesktopIntent::StructuredFilterUpdated(StructuredFilter {
@@ -84,6 +100,42 @@ mod tests {
             .map(|loaded| loaded.visible_message_count())
             .expect("data should stay loaded");
         assert_eq!(post_query_count, 0);
+    }
+
+    #[test]
+    fn desktop_model_ignores_stale_load_completion_events() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "tests/data/testfile_control_messages.dlt",
+        );
+
+        let mut model = DesktopModel::default();
+        model.apply_intent(DesktopIntent::OpenFilesRequested);
+        let stale_generation = model
+            .active_load_generation()
+            .expect("first load generation should exist");
+
+        model.apply_intent(DesktopIntent::OpenFilesRequested);
+        let active_generation = model
+            .active_load_generation()
+            .expect("second load generation should exist");
+
+        let stale_data = load_retained_dataset(vec![path.clone()]).expect("fixture should load");
+        model.apply_intent(DesktopIntent::LoadSucceeded {
+            generation: stale_generation,
+            data: stale_data,
+        });
+
+        assert_eq!(model.state(), &DesktopAppState::Loading);
+        assert!(model.loaded_data().is_none());
+
+        let active_data = load_retained_dataset(vec![path]).expect("fixture should load");
+        model.apply_intent(DesktopIntent::LoadSucceeded {
+            generation: active_generation,
+            data: active_data,
+        });
+
+        assert_eq!(model.state(), &DesktopAppState::Loaded);
+        assert!(model.loaded_data().is_some());
     }
 
     #[test]

@@ -1,7 +1,14 @@
-use crate::desktop::application::{DesktopAppState, DesktopIntent, DesktopModel};
+use crate::desktop::application::{
+    DesktopAppState,
+    DesktopIntent,
+    DesktopModel,
+    LoadGeneration,
+};
 use crate::desktop::retained::{RetainedDataSet, load_retained_dataset};
 use anyhow::{Result, anyhow};
 use eframe::egui;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::thread;
 
 const TABLE_COL_TIMESTAMP: f32 = 140.0;
 const TABLE_COL_ECU: f32 = 70.0;
@@ -223,18 +230,65 @@ fn render_log_table_with_navigation(
     intents
 }
 
-#[derive(Default)]
 struct DesktopShell {
     model: DesktopModel,
+    load_event_tx: Sender<LoadWorkerEvent>,
+    load_event_rx: Receiver<LoadWorkerEvent>,
+}
+
+#[derive(Debug)]
+enum LoadWorkerEvent {
+    Succeeded {
+        generation: LoadGeneration,
+        data: RetainedDataSet,
+    },
+    Failed {
+        generation: LoadGeneration,
+        message: String,
+    },
+}
+
+impl LoadWorkerEvent {
+    fn into_intent(self) -> DesktopIntent {
+        match self {
+            Self::Succeeded { generation, data } => {
+                DesktopIntent::LoadSucceeded { generation, data }
+            }
+            Self::Failed {
+                generation,
+                message,
+            } => DesktopIntent::LoadFailed {
+                generation,
+                message,
+            },
+        }
+    }
+}
+
+impl Default for DesktopShell {
+    fn default() -> Self {
+        let (load_event_tx, load_event_rx) = mpsc::channel();
+        Self {
+            model: DesktopModel::default(),
+            load_event_tx,
+            load_event_rx,
+        }
+    }
 }
 
 impl eframe::App for DesktopShell {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        while let Ok(event) = self.load_event_rx.try_recv() {
+            self.model.apply_intent(event.into_intent());
+        }
+
+        if self.model.active_load_generation().is_some() {
+            ctx.request_repaint();
+        }
+
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("Open DLT files").clicked() {
-                    self.model.apply_intent(DesktopIntent::OpenFilesRequested);
-
                     let Some(paths) = rfd::FileDialog::new()
                         .add_filter("DLT files", &["dlt"])
                         .pick_files()
@@ -243,12 +297,23 @@ impl eframe::App for DesktopShell {
                         return;
                     };
 
-                    match load_retained_dataset(paths) {
-                        Ok(data) => self.model.apply_intent(DesktopIntent::LoadSucceeded(data)),
-                        Err(err) => self
-                            .model
-                            .apply_intent(DesktopIntent::LoadFailed(err.to_string())),
-                    }
+                    self.model.apply_intent(DesktopIntent::OpenFilesRequested);
+                    let Some(generation) = self.model.active_load_generation() else {
+                        return;
+                    };
+
+                    let load_event_tx = self.load_event_tx.clone();
+                    thread::spawn(move || {
+                        let event = match load_retained_dataset(paths) {
+                            Ok(data) => LoadWorkerEvent::Succeeded { generation, data },
+                            Err(err) => LoadWorkerEvent::Failed {
+                                generation,
+                                message: err.to_string(),
+                            },
+                        };
+
+                        let _ = load_event_tx.send(event);
+                    });
                 }
 
                 if ui.button("Reset").clicked() {
