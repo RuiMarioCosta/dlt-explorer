@@ -332,11 +332,10 @@ impl RetainedDataSet {
     }
 
     fn rebuild_rendered_search(&mut self, previous_selected_index: Option<usize>) {
+        self.selected_visible_row = self.resolve_selection_continuity(previous_selected_index);
+
         if self.rendered_search.query.is_empty() {
             self.rendered_search.active_match_position = None;
-
-            self.selected_visible_row = previous_selected_index
-                .and_then(|selected| self.index.position_for_index(selected));
             return;
         }
 
@@ -346,18 +345,19 @@ impl RetainedDataSet {
             return;
         }
 
-        let preferred = self
-            .index
-            .position_for_index(previous_selected_index.unwrap_or(usize::MAX))
-            .or_else(|| {
-                self.rendered_search
-                    .active_match_position
-                    .filter(|&pos| self.index.is_rendered_search_match_position(pos))
-            })
-            .unwrap_or(0);
+        self.rendered_search.active_match_position = self.selected_visible_row;
+    }
 
-        self.selected_visible_row = Some(preferred);
-        self.rendered_search.active_match_position = Some(preferred);
+    fn resolve_selection_continuity(&self, previous_selected_index: Option<usize>) -> Option<usize> {
+        previous_selected_index
+            .and_then(|selected| self.index.position_for_index(selected))
+            .or_else(|| {
+                if self.index.visible_count() > 0 {
+                    Some(0)
+                } else {
+                    None
+                }
+            })
     }
 
     fn apply_active_match_by_index(&mut self, match_index: usize) -> bool {
