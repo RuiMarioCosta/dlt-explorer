@@ -71,7 +71,6 @@ impl StructuredFilter {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct RenderedTextSearch {
     pub(crate) query: String,
-    pub(crate) match_positions: Vec<usize>,
     pub(crate) active_match_position: Option<usize>,
 }
 
@@ -229,6 +228,11 @@ impl RetainedDataSet {
         self.rebuild_rendered_search(previous_selected_index);
     }
 
+    pub(crate) fn set_structured_filter(&mut self, filter: StructuredFilter) {
+        self.active_filter = filter;
+        self.rebuild_index();
+    }
+
     pub(crate) fn clear_filter(&mut self) {
         self.active_filter.reset();
         self.rebuild_index();
@@ -248,20 +252,16 @@ impl RetainedDataSet {
     }
 
     pub(crate) fn rendered_search_match_count(&self) -> usize {
-        self.rendered_search.match_positions.len()
+        self.index.rendered_search_match_count()
     }
 
     pub(crate) fn rendered_search_active_ordinal(&self) -> Option<usize> {
         let active_position = self.rendered_search.active_match_position?;
-        self.rendered_search
-            .match_positions
-            .iter()
-            .position(|&pos| pos == active_position)
-            .map(|idx| idx + 1)
+        self.index.rendered_search_match_ordinal(active_position)
     }
 
     pub(crate) fn select_next_rendered_match(&mut self) -> bool {
-        let total = self.rendered_search.match_positions.len();
+        let total = self.index.rendered_search_match_count();
         if total == 0 {
             return false;
         }
@@ -269,19 +269,15 @@ impl RetainedDataSet {
         let current_idx = self
             .rendered_search
             .active_match_position
-            .and_then(|active| {
-                self.rendered_search
-                    .match_positions
-                    .iter()
-                    .position(|&pos| pos == active)
-            })
+            .and_then(|active| self.index.rendered_search_match_ordinal(active))
+            .map(|ordinal| ordinal - 1)
             .unwrap_or(0);
         let next_idx = (current_idx + 1) % total;
         self.apply_active_match_by_index(next_idx)
     }
 
     pub(crate) fn select_previous_rendered_match(&mut self) -> bool {
-        let total = self.rendered_search.match_positions.len();
+        let total = self.index.rendered_search_match_count();
         if total == 0 {
             return false;
         }
@@ -289,12 +285,8 @@ impl RetainedDataSet {
         let current_idx = self
             .rendered_search
             .active_match_position
-            .and_then(|active| {
-                self.rendered_search
-                    .match_positions
-                    .iter()
-                    .position(|&pos| pos == active)
-            })
+            .and_then(|active| self.index.rendered_search_match_ordinal(active))
+            .map(|ordinal| ordinal - 1)
             .unwrap_or(0);
         let prev_idx = (current_idx + total - 1) % total;
         self.apply_active_match_by_index(prev_idx)
@@ -329,7 +321,7 @@ impl RetainedDataSet {
             return;
         }
 
-        if self.rendered_search.match_positions.contains(&position) {
+        if self.index.is_rendered_search_match_position(position) {
             self.rendered_search.active_match_position = Some(position);
         }
     }
@@ -341,7 +333,6 @@ impl RetainedDataSet {
 
     fn rebuild_rendered_search(&mut self, previous_selected_index: Option<usize>) {
         if self.rendered_search.query.is_empty() {
-            self.rendered_search.match_positions.clear();
             self.rendered_search.active_match_position = None;
 
             self.selected_visible_row = previous_selected_index
@@ -349,8 +340,7 @@ impl RetainedDataSet {
             return;
         }
 
-        self.rendered_search.match_positions = (0..self.index.visible_count()).collect();
-        if self.rendered_search.match_positions.is_empty() {
+        if self.index.rendered_search_match_count() == 0 {
             self.rendered_search.active_match_position = None;
             self.selected_visible_row = None;
             return;
@@ -360,9 +350,9 @@ impl RetainedDataSet {
             .index
             .position_for_index(previous_selected_index.unwrap_or(usize::MAX))
             .or_else(|| {
-                self.rendered_search.active_match_position.filter(|&pos| {
-                    pos < self.rendered_search.match_positions.len()
-                })
+                self.rendered_search
+                    .active_match_position
+                    .filter(|&pos| self.index.is_rendered_search_match_position(pos))
             })
             .unwrap_or(0);
 
@@ -371,8 +361,7 @@ impl RetainedDataSet {
     }
 
     fn apply_active_match_by_index(&mut self, match_index: usize) -> bool {
-        let Some(&visible_position) = self.rendered_search.match_positions.get(match_index)
-        else {
+        let Some(visible_position) = self.index.rendered_search_match_position(match_index) else {
             return false;
         };
 
@@ -408,9 +397,7 @@ pub(crate) fn load_retained_dataset(paths: Vec<PathBuf>) -> Result<RetainedDataS
             version,
             parse_errors,
             dlt: RetainedDlt::V1(dlt),
-            index: IndexLayer {
-                visible_indices: Vec::new(),
-            },
+            index: IndexLayer::empty(),
             active_filter: StructuredFilter::default(),
             rendered_search: RenderedTextSearch::default(),
             selected_visible_row: None,
@@ -425,9 +412,7 @@ pub(crate) fn load_retained_dataset(paths: Vec<PathBuf>) -> Result<RetainedDataS
             version,
             parse_errors,
             dlt: RetainedDlt::V2(dlt),
-            index: IndexLayer {
-                visible_indices: Vec::new(),
-            },
+            index: IndexLayer::empty(),
             active_filter: StructuredFilter::default(),
             rendered_search: RenderedTextSearch::default(),
             selected_visible_row: None,

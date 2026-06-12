@@ -10,7 +10,37 @@ pub(crate) use ui::run_desktop_shell;
 mod tests {
     use super::application::{DesktopAppState, DesktopIntent, DesktopModel};
     use super::retained::{StructuredFilter, format_message_type, load_retained_dataset};
+    use std::io::Write;
     use std::path::PathBuf;
+
+    fn write_v1_frame(
+        file: &mut std::fs::File,
+        seconds: u32,
+        storage_ecu: [u8; 4],
+        message_ecu: Option<[u8; 4]>,
+    ) {
+        let mut frame = Vec::new();
+        frame.extend_from_slice(b"DLT\x01");
+        frame.extend_from_slice(&seconds.to_le_bytes());
+        frame.extend_from_slice(&0u32.to_le_bytes());
+        frame.extend_from_slice(&storage_ecu);
+
+        let mut htyp = 1 << 5;
+        if message_ecu.is_some() {
+            htyp |= 0x04;
+        }
+
+        frame.push(htyp);
+        frame.push(0);
+        let len: u16 = if message_ecu.is_some() { 8 } else { 4 };
+        frame.extend_from_slice(&len.to_be_bytes());
+
+        if let Some(ecu) = message_ecu {
+            frame.extend_from_slice(&ecu);
+        }
+
+        file.write_all(&frame).unwrap();
+    }
 
     #[test]
     fn desktop_model_starts_idle() {
@@ -391,5 +421,31 @@ mod tests {
 
         assert_eq!(data.selected_row_index(), Some(selected_index));
         assert!(data.visible_message_count() > 0);
+    }
+
+    #[test]
+    fn rendered_text_search_refines_structured_filter_instead_of_widening_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("query_pipeline_ordering.dlt");
+        let mut file = std::fs::File::create(&path).unwrap();
+        write_v1_frame(&mut file, 1, *b"ECU1", None);
+        write_v1_frame(&mut file, 2, *b"ECU2", None);
+        file.flush().unwrap();
+
+        let mut data = load_retained_dataset(vec![path]).expect("fixture should load");
+        assert_eq!(data.message_count(), 2);
+
+        data.set_structured_filter(StructuredFilter {
+            ecu_contains: "ECU1".to_string(),
+            ..StructuredFilter::default()
+        });
+
+        assert_eq!(data.visible_message_count(), 1);
+
+        let outside_filter_text = data.rendered_row_text_for_index(1);
+        data.set_rendered_search_query(outside_filter_text);
+
+        assert_eq!(data.visible_message_count(), 0);
+        assert_eq!(data.rendered_search_match_count(), 0);
     }
 }

@@ -101,8 +101,7 @@ impl DesktopModel {
             }
             DesktopIntent::StructuredFilterUpdated(filter) => {
                 if let Some(data) = self.retained.as_mut() {
-                    data.active_filter = filter;
-                    data.rebuild_index();
+                    data.set_structured_filter(filter);
                 }
             }
             DesktopIntent::StructuredFilterCleared => {
@@ -172,8 +171,9 @@ impl DesktopBenchmarkHarness {
     }
 
     pub fn set_kind_filter_contains(&mut self, query: &str) {
-        self.data.active_filter.kind_contains = query.to_string();
-        self.data.rebuild_index();
+        let mut filter = self.data.active_filter.clone();
+        filter.kind_contains = query.to_string();
+        self.data.set_structured_filter(filter);
     }
 
     pub fn set_rendered_search_query(&mut self, query: &str) {
