@@ -1,4 +1,4 @@
-use crate::desktop::application::{DesktopAppState, DesktopModel};
+use crate::desktop::application::{DesktopAppState, DesktopIntent, DesktopModel};
 use crate::desktop::retained::{RetainedDataSet, load_retained_dataset};
 use anyhow::{Result, anyhow};
 use eframe::egui;
@@ -10,35 +10,36 @@ const TABLE_COL_CTID: f32 = 70.0;
 const TABLE_COL_TYPE: f32 = 140.0;
 const TABLE_ROW_HEIGHT: f32 = 20.0;
 
-fn render_structured_filter_controls(ui: &mut egui::Ui, data: &mut RetainedDataSet) {
+fn render_structured_filter_controls(ui: &mut egui::Ui, data: &RetainedDataSet) -> Vec<DesktopIntent> {
     ui.separator();
     ui.label("Structured Filter");
 
+    let mut intents = Vec::new();
+    let mut next_filter = data.active_filter.clone();
     let mut changed = false;
     let mut clear_clicked = false;
     ui.horizontal(|ui| {
-        let filter = &mut data.active_filter;
         changed |= ui
             .add(
-                egui::TextEdit::singleline(&mut filter.ecu_contains)
+                egui::TextEdit::singleline(&mut next_filter.ecu_contains)
                     .hint_text("ECU contains"),
             )
             .changed();
         changed |= ui
             .add(
-                egui::TextEdit::singleline(&mut filter.apid_contains)
+                egui::TextEdit::singleline(&mut next_filter.apid_contains)
                     .hint_text("APID contains"),
             )
             .changed();
         changed |= ui
             .add(
-                egui::TextEdit::singleline(&mut filter.ctid_contains)
+                egui::TextEdit::singleline(&mut next_filter.ctid_contains)
                     .hint_text("CTID contains"),
             )
             .changed();
         changed |= ui
             .add(
-                egui::TextEdit::singleline(&mut filter.kind_contains)
+                egui::TextEdit::singleline(&mut next_filter.kind_contains)
                     .hint_text("Type contains"),
             )
             .changed();
@@ -47,9 +48,9 @@ fn render_structured_filter_controls(ui: &mut egui::Ui, data: &mut RetainedDataS
     });
 
     if clear_clicked {
-        data.clear_filter();
+        intents.push(DesktopIntent::StructuredFilterCleared);
     } else if changed {
-        data.rebuild_index();
+        intents.push(DesktopIntent::StructuredFilterUpdated(next_filter));
     }
 
     ui.label(format!(
@@ -57,12 +58,16 @@ fn render_structured_filter_controls(ui: &mut egui::Ui, data: &mut RetainedDataS
         data.visible_message_count(),
         data.message_count()
     ));
+
+    intents
 }
 
-fn render_rendered_search_controls(ui: &mut egui::Ui, data: &mut RetainedDataSet) {
+fn render_rendered_search_controls(ui: &mut egui::Ui, data: &RetainedDataSet) -> Vec<DesktopIntent> {
     ui.separator();
     ui.label("Rendered Text Search");
 
+    let mut intents = Vec::new();
+    let mut query = data.rendered_search_query().to_string();
     let mut query_changed = false;
     let mut clear_clicked = false;
     let mut prev_clicked = false;
@@ -71,7 +76,7 @@ fn render_rendered_search_controls(ui: &mut egui::Ui, data: &mut RetainedDataSet
     ui.horizontal(|ui| {
         query_changed = ui
             .add(
-                egui::TextEdit::singleline(data.rendered_search_query_mut())
+                egui::TextEdit::singleline(&mut query)
                     .hint_text("Search rendered message text"),
             )
             .changed();
@@ -82,19 +87,18 @@ fn render_rendered_search_controls(ui: &mut egui::Ui, data: &mut RetainedDataSet
     });
 
     if query_changed {
-        let query = data.rendered_search_query_mut().clone();
-        data.set_rendered_search_query(query);
+        intents.push(DesktopIntent::RenderedSearchQueryUpdated(query));
     }
 
     if clear_clicked {
-        data.set_rendered_search_query(String::new());
+        intents.push(DesktopIntent::RenderedSearchCleared);
     }
 
     if prev_clicked {
-        data.select_previous_rendered_match();
+        intents.push(DesktopIntent::RenderedSearchPrevious);
     }
     if next_clicked {
-        data.select_next_rendered_match();
+        intents.push(DesktopIntent::RenderedSearchNext);
     }
 
     let match_count = data.rendered_search_match_count();
@@ -108,11 +112,19 @@ fn render_rendered_search_controls(ui: &mut egui::Ui, data: &mut RetainedDataSet
     if let Some(selected) = data.selected_row_index() {
         ui.label(format!("Selected row: {}", selected));
     }
+
+    intents
 }
 
-fn render_log_table_with_navigation(ui: &mut egui::Ui, data: &mut RetainedDataSet) {
+fn render_log_table_with_navigation(
+    ui: &mut egui::Ui,
+    data: &RetainedDataSet,
+    should_scroll_to_selection: bool,
+) -> Vec<DesktopIntent> {
     ui.separator();
     ui.label("Log Table");
+
+    let mut intents = Vec::new();
 
     ui.horizontal(|ui| {
         ui.add_sized(
@@ -146,11 +158,10 @@ fn render_log_table_with_navigation(ui: &mut egui::Ui, data: &mut RetainedDataSe
     let total_rows = data.visible_message_count();
     if total_rows == 0 {
         ui.label("No log rows match the active query.");
-        return;
+        return intents;
     }
 
     let selected_visible_row = data.selected_visible_row();
-    let should_scroll_to_selection = data.take_pending_scroll_to_selected();
 
     egui::ScrollArea::vertical()
         .id_salt("desktop_log_table")
@@ -201,10 +212,15 @@ fn render_log_table_with_navigation(ui: &mut egui::Ui, data: &mut RetainedDataSe
                 }
 
                 if response.response.clicked() {
-                    data.select_visible_row(visible_position, false);
+                    intents.push(DesktopIntent::VisibleRowSelected {
+                        position: visible_position,
+                        request_scroll: false,
+                    });
                 }
             }
         });
+
+    intents
 }
 
 #[derive(Default)]
@@ -217,24 +233,26 @@ impl eframe::App for DesktopShell {
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("Open DLT files").clicked() {
-                    self.model.begin_loading();
+                    self.model.apply_intent(DesktopIntent::OpenFilesRequested);
 
                     let Some(paths) = rfd::FileDialog::new()
                         .add_filter("DLT files", &["dlt"])
                         .pick_files()
                     else {
-                        self.model.reset_idle();
+                        self.model.apply_intent(DesktopIntent::OpenFilesCancelled);
                         return;
                     };
 
                     match load_retained_dataset(paths) {
-                        Ok(data) => self.model.loading_succeeded(data),
-                        Err(err) => self.model.loading_failed(err.to_string()),
+                        Ok(data) => self.model.apply_intent(DesktopIntent::LoadSucceeded(data)),
+                        Err(err) => self
+                            .model
+                            .apply_intent(DesktopIntent::LoadFailed(err.to_string())),
                     }
                 }
 
                 if ui.button("Reset").clicked() {
-                    self.model.reset_idle();
+                    self.model.apply_intent(DesktopIntent::ResetRequested);
                 }
             });
         });
@@ -256,7 +274,10 @@ impl eframe::App for DesktopShell {
                 DesktopAppState::Loaded => {
                     ui.label("State: loaded");
 
-                    if let Some(data) = self.model.loaded_data_mut() {
+                    let should_scroll_to_selection = self.model.take_pending_scroll_to_selected();
+                    let mut pending_intents = Vec::new();
+
+                    if let Some(data) = self.model.loaded_data() {
                         ui.label(format!(
                             "Loaded {} message(s) from {} file(s) (DLT v{}).",
                             data.message_count(),
@@ -290,9 +311,17 @@ impl eframe::App for DesktopShell {
                             }
                         }
 
-                        render_structured_filter_controls(ui, data);
-                        render_rendered_search_controls(ui, data);
-                        render_log_table_with_navigation(ui, data);
+                        pending_intents.extend(render_structured_filter_controls(ui, data));
+                        pending_intents.extend(render_rendered_search_controls(ui, data));
+                        pending_intents.extend(render_log_table_with_navigation(
+                            ui,
+                            data,
+                            should_scroll_to_selection,
+                        ));
+                    }
+
+                    for intent in pending_intents {
+                        self.model.apply_intent(intent);
                     }
                 }
                 DesktopAppState::Error(message) => {

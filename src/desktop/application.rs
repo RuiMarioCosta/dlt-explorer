@@ -1,6 +1,25 @@
-use crate::desktop::retained::{RetainedDataSet, load_retained_dataset};
+use crate::desktop::retained::{RetainedDataSet, StructuredFilter, load_retained_dataset};
 use anyhow::Result;
 use std::path::PathBuf;
+
+#[derive(Debug)]
+pub(crate) enum DesktopIntent {
+    OpenFilesRequested,
+    OpenFilesCancelled,
+    LoadSucceeded(RetainedDataSet),
+    LoadFailed(String),
+    ResetRequested,
+    StructuredFilterUpdated(StructuredFilter),
+    StructuredFilterCleared,
+    RenderedSearchQueryUpdated(String),
+    RenderedSearchCleared,
+    RenderedSearchPrevious,
+    RenderedSearchNext,
+    VisibleRowSelected {
+        position: usize,
+        request_scroll: bool,
+    },
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum DesktopAppState {
@@ -30,27 +49,81 @@ impl DesktopModel {
         &self.state
     }
 
-    pub(crate) fn begin_loading(&mut self) {
-        self.state = DesktopAppState::Loading;
+    pub(crate) fn apply_intent(&mut self, intent: DesktopIntent) {
+        match intent {
+            DesktopIntent::OpenFilesRequested => {
+                self.state = DesktopAppState::Loading;
+            }
+            DesktopIntent::OpenFilesCancelled => {
+                self.reset_idle();
+            }
+            DesktopIntent::LoadSucceeded(data) => {
+                self.retained = Some(data);
+                self.state = DesktopAppState::Loaded;
+            }
+            DesktopIntent::LoadFailed(message) => {
+                self.retained = None;
+                self.state = DesktopAppState::Error(message);
+            }
+            DesktopIntent::ResetRequested => {
+                self.reset_idle();
+            }
+            DesktopIntent::StructuredFilterUpdated(filter) => {
+                if let Some(data) = self.retained.as_mut() {
+                    data.active_filter = filter;
+                    data.rebuild_index();
+                }
+            }
+            DesktopIntent::StructuredFilterCleared => {
+                if let Some(data) = self.retained.as_mut() {
+                    data.clear_filter();
+                }
+            }
+            DesktopIntent::RenderedSearchQueryUpdated(query) => {
+                if let Some(data) = self.retained.as_mut() {
+                    data.set_rendered_search_query(query);
+                }
+            }
+            DesktopIntent::RenderedSearchCleared => {
+                if let Some(data) = self.retained.as_mut() {
+                    data.set_rendered_search_query(String::new());
+                }
+            }
+            DesktopIntent::RenderedSearchPrevious => {
+                if let Some(data) = self.retained.as_mut() {
+                    data.select_previous_rendered_match();
+                }
+            }
+            DesktopIntent::RenderedSearchNext => {
+                if let Some(data) = self.retained.as_mut() {
+                    data.select_next_rendered_match();
+                }
+            }
+            DesktopIntent::VisibleRowSelected {
+                position,
+                request_scroll,
+            } => {
+                if let Some(data) = self.retained.as_mut() {
+                    data.select_visible_row(position, request_scroll);
+                }
+            }
+        }
     }
 
-    pub(crate) fn loaded_data_mut(&mut self) -> Option<&mut RetainedDataSet> {
-        self.retained.as_mut()
-    }
-
-    pub(crate) fn loading_succeeded(&mut self, data: RetainedDataSet) {
-        self.retained = Some(data);
-        self.state = DesktopAppState::Loaded;
-    }
-
-    pub(crate) fn loading_failed(&mut self, message: impl Into<String>) {
-        self.retained = None;
-        self.state = DesktopAppState::Error(message.into());
+    pub(crate) fn loaded_data(&self) -> Option<&RetainedDataSet> {
+        self.retained.as_ref()
     }
 
     pub(crate) fn reset_idle(&mut self) {
         self.retained = None;
         self.state = DesktopAppState::Idle;
+    }
+
+    pub(crate) fn take_pending_scroll_to_selected(&mut self) -> bool {
+        self.retained
+            .as_mut()
+            .map(|data| data.take_pending_scroll_to_selected())
+            .unwrap_or(false)
     }
 }
 

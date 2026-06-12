@@ -8,7 +8,7 @@ pub(crate) use ui::run_desktop_shell;
 
 #[cfg(test)]
 mod tests {
-    use super::application::{DesktopAppState, DesktopModel};
+    use super::application::{DesktopAppState, DesktopIntent, DesktopModel};
     use super::retained::{StructuredFilter, format_message_type, load_retained_dataset};
     use std::path::PathBuf;
 
@@ -22,14 +22,68 @@ mod tests {
     fn desktop_model_transitions_loading_and_error() {
         let mut model = DesktopModel::default();
 
-        model.begin_loading();
+        model.apply_intent(DesktopIntent::OpenFilesRequested);
         assert_eq!(model.state(), &DesktopAppState::Loading);
 
-        model.loading_failed("boom");
+        model.apply_intent(DesktopIntent::LoadFailed("boom".to_string()));
         assert_eq!(model.state(), &DesktopAppState::Error("boom".to_string()));
 
         model.reset_idle();
         assert_eq!(model.state(), &DesktopAppState::Idle);
+    }
+
+    #[test]
+    fn desktop_model_applies_core_state_intents_deterministically() {
+        let mut model = DesktopModel::default();
+
+        model.apply_intent(DesktopIntent::OpenFilesRequested);
+        assert_eq!(model.state(), &DesktopAppState::Loading);
+
+        model.apply_intent(DesktopIntent::OpenFilesCancelled);
+        assert_eq!(model.state(), &DesktopAppState::Idle);
+
+        model.apply_intent(DesktopIntent::OpenFilesRequested);
+        model.apply_intent(DesktopIntent::LoadFailed("boom".to_string()));
+        assert_eq!(model.state(), &DesktopAppState::Error("boom".to_string()));
+
+        model.apply_intent(DesktopIntent::ResetRequested);
+        assert_eq!(model.state(), &DesktopAppState::Idle);
+    }
+
+    #[test]
+    fn desktop_model_routes_loaded_mutations_through_intents() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "tests/data/testfile_control_messages.dlt",
+        );
+
+        let mut model = DesktopModel::default();
+        let data = load_retained_dataset(vec![path]).expect("fixture should load");
+        let total = data.message_count();
+
+        model.apply_intent(DesktopIntent::LoadSucceeded(data));
+        assert_eq!(model.state(), &DesktopAppState::Loaded);
+
+        model.apply_intent(DesktopIntent::StructuredFilterUpdated(StructuredFilter {
+            kind_contains: "control".to_string(),
+            ..StructuredFilter::default()
+        }));
+
+        let filtered_count = model
+            .loaded_data()
+            .map(|loaded| loaded.visible_message_count())
+            .expect("data should stay loaded");
+        assert!(filtered_count > 0);
+        assert!(filtered_count <= total);
+
+        model.apply_intent(DesktopIntent::RenderedSearchQueryUpdated(
+            "no-such-rendered-text-token".to_string(),
+        ));
+
+        let post_query_count = model
+            .loaded_data()
+            .map(|loaded| loaded.visible_message_count())
+            .expect("data should stay loaded");
+        assert_eq!(post_query_count, 0);
     }
 
     #[test]
