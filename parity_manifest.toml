@@ -36,6 +36,78 @@ v1_benchmark = "v1_open_file"
 v2_benchmark = "v2_open_file"
 parameter = "truncated_tail"
 
+[[benchmark_pairs]]
+scenario = "desktop_query_update_uniform_ecu_small"
+v1_benchmark = "v1_desktop_query_update"
+v2_benchmark = "v2_desktop_query_update"
+parameter = "uniform_ecu_small"
+
+[[benchmark_pairs]]
+scenario = "desktop_query_update_uniform_ecu_large"
+v1_benchmark = "v1_desktop_query_update"
+v2_benchmark = "v2_desktop_query_update"
+parameter = "uniform_ecu_large"
+
+[[benchmark_pairs]]
+scenario = "desktop_query_update_sparse_mixed_ecu_large"
+v1_benchmark = "v1_desktop_query_update"
+v2_benchmark = "v2_desktop_query_update"
+parameter = "sparse_mixed_ecu_large"
+
+[[benchmark_pairs]]
+scenario = "desktop_query_update_dense_mixed_ecu_large"
+v1_benchmark = "v1_desktop_query_update"
+v2_benchmark = "v2_desktop_query_update"
+parameter = "dense_mixed_ecu_large"
+
+[[benchmark_pairs]]
+scenario = "desktop_query_update_marker_in_payload"
+v1_benchmark = "v1_desktop_query_update"
+v2_benchmark = "v2_desktop_query_update"
+parameter = "marker_in_payload"
+
+[[benchmark_pairs]]
+scenario = "desktop_query_update_truncated_tail"
+v1_benchmark = "v1_desktop_query_update"
+v2_benchmark = "v2_desktop_query_update"
+parameter = "truncated_tail"
+
+[[benchmark_pairs]]
+scenario = "log_table_viewport_uniform_ecu_small"
+v1_benchmark = "v1_log_table_viewport"
+v2_benchmark = "v2_log_table_viewport"
+parameter = "uniform_ecu_small"
+
+[[benchmark_pairs]]
+scenario = "log_table_viewport_uniform_ecu_large"
+v1_benchmark = "v1_log_table_viewport"
+v2_benchmark = "v2_log_table_viewport"
+parameter = "uniform_ecu_large"
+
+[[benchmark_pairs]]
+scenario = "log_table_viewport_sparse_mixed_ecu_large"
+v1_benchmark = "v1_log_table_viewport"
+v2_benchmark = "v2_log_table_viewport"
+parameter = "sparse_mixed_ecu_large"
+
+[[benchmark_pairs]]
+scenario = "log_table_viewport_dense_mixed_ecu_large"
+v1_benchmark = "v1_log_table_viewport"
+v2_benchmark = "v2_log_table_viewport"
+parameter = "dense_mixed_ecu_large"
+
+[[benchmark_pairs]]
+scenario = "log_table_viewport_marker_in_payload"
+v1_benchmark = "v1_log_table_viewport"
+v2_benchmark = "v2_log_table_viewport"
+parameter = "marker_in_payload"
+
+[[benchmark_pairs]]
+scenario = "log_table_viewport_truncated_tail"
+v1_benchmark = "v1_log_table_viewport"
+v2_benchmark = "v2_log_table_viewport"
+parameter = "truncated_tail"
+
 [[test_pairs]]
 scenario = "single_frame"
 v1_test_fn = "finds_single_v1_frame"

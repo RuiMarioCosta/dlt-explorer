@@ -7,6 +7,7 @@ fn bench_operations(c: &mut Criterion) {
     let profile = BenchmarkProfile::from_env();
 
     operations::open_file::bench(c, profile);
+    operations::desktop_query::bench(c, profile);
 }
 
 criterion_group!(benches, bench_operations);
