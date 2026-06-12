@@ -1,5 +1,5 @@
 mod cmd_line_parser;
-mod desktop;
+pub mod desktop;
 pub mod dlt;
 
 use crate::dlt::payload::{MESSAGE_TYPE, decode_message_type_info};

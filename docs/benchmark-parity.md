@@ -6,14 +6,16 @@ This repository uses an operation-first benchmark layout under a single Criterio
 
 Benchmark IDs are frozen to the following canonical format:
 
-- Group: operation name (`scan_frames`, `parse_header`, `decode_payload`, `open_file`)
-- Benchmark identifier: `<protocol>_<operation>` (`v1_scan_frames`, `v2_scan_frames`, etc.)
+- Group: operation name (`open_file`, `desktop_query_update`, `log_table_viewport`)
+- Benchmark identifier: `<protocol>_<operation>` (`v1_open_file`, `v2_desktop_query_update`, etc.)
 - Benchmark parameter: shared scenario name (`uniform_ecu_small`, `uniform_ecu_large`, `sparse_mixed_ecu_large`, `dense_mixed_ecu_large`, `marker_in_payload`, `truncated_tail`)
 
 Example:
 
-- `BenchmarkId::new("v1_scan_frames", "uniform_ecu_large")`
-- `BenchmarkId::new("v2_decode_payload", "marker_in_payload")`
+- `BenchmarkId::new("v1_open_file", "uniform_ecu_large")`
+- `BenchmarkId::new("v2_desktop_query_update", "marker_in_payload")`
+- `BenchmarkId::new("v1_desktop_query_update", "uniform_ecu_large")`
+- `BenchmarkId::new("v2_log_table_viewport", "dense_mixed_ecu_large")`
 
 ## Benchmark profiles
 
