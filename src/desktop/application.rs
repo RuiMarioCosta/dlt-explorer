@@ -2,12 +2,20 @@ use crate::desktop::retained::{RetainedDataSet, StructuredFilter, load_retained_
 use anyhow::Result;
 use std::path::PathBuf;
 
+pub(crate) type LoadGeneration = u64;
+
 #[derive(Debug)]
 pub(crate) enum DesktopIntent {
     OpenFilesRequested,
     OpenFilesCancelled,
-    LoadSucceeded(RetainedDataSet),
-    LoadFailed(String),
+    LoadSucceeded {
+        generation: LoadGeneration,
+        data: RetainedDataSet,
+    },
+    LoadFailed {
+        generation: LoadGeneration,
+        message: String,
+    },
     ResetRequested,
     StructuredFilterUpdated(StructuredFilter),
     StructuredFilterCleared,
@@ -33,6 +41,8 @@ pub(crate) enum DesktopAppState {
 pub(crate) struct DesktopModel {
     state: DesktopAppState,
     retained: Option<RetainedDataSet>,
+    active_load_generation: Option<LoadGeneration>,
+    next_load_generation: LoadGeneration,
 }
 
 impl Default for DesktopModel {
@@ -40,6 +50,8 @@ impl Default for DesktopModel {
         Self {
             state: DesktopAppState::Idle,
             retained: None,
+            active_load_generation: None,
+            next_load_generation: 0,
         }
     }
 }
@@ -49,19 +61,38 @@ impl DesktopModel {
         &self.state
     }
 
+    pub(crate) fn active_load_generation(&self) -> Option<LoadGeneration> {
+        self.active_load_generation
+    }
+
     pub(crate) fn apply_intent(&mut self, intent: DesktopIntent) {
         match intent {
             DesktopIntent::OpenFilesRequested => {
+                self.next_load_generation = self.next_load_generation.saturating_add(1);
+                self.active_load_generation = Some(self.next_load_generation);
                 self.state = DesktopAppState::Loading;
             }
             DesktopIntent::OpenFilesCancelled => {
                 self.reset_idle();
             }
-            DesktopIntent::LoadSucceeded(data) => {
+            DesktopIntent::LoadSucceeded { generation, data } => {
+                if self.active_load_generation != Some(generation) {
+                    return;
+                }
+
+                self.active_load_generation = None;
                 self.retained = Some(data);
                 self.state = DesktopAppState::Loaded;
             }
-            DesktopIntent::LoadFailed(message) => {
+            DesktopIntent::LoadFailed {
+                generation,
+                message,
+            } => {
+                if self.active_load_generation != Some(generation) {
+                    return;
+                }
+
+                self.active_load_generation = None;
                 self.retained = None;
                 self.state = DesktopAppState::Error(message);
             }
@@ -116,6 +147,7 @@ impl DesktopModel {
 
     pub(crate) fn reset_idle(&mut self) {
         self.retained = None;
+        self.active_load_generation = None;
         self.state = DesktopAppState::Idle;
     }
 
