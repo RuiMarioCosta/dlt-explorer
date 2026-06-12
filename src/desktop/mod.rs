@@ -139,6 +139,41 @@ mod tests {
     }
 
     #[test]
+    fn desktop_model_ignores_stale_failed_completion_after_newer_success() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "tests/data/testfile_control_messages.dlt",
+        );
+
+        let mut model = DesktopModel::default();
+        model.apply_intent(DesktopIntent::OpenFilesRequested);
+        let stale_generation = model
+            .active_load_generation()
+            .expect("first load generation should exist");
+
+        model.apply_intent(DesktopIntent::OpenFilesRequested);
+        let active_generation = model
+            .active_load_generation()
+            .expect("second load generation should exist");
+
+        let active_data = load_retained_dataset(vec![path]).expect("fixture should load");
+        model.apply_intent(DesktopIntent::LoadSucceeded {
+            generation: active_generation,
+            data: active_data,
+        });
+
+        assert_eq!(model.state(), &DesktopAppState::Loaded);
+        assert!(model.loaded_data().is_some());
+
+        model.apply_intent(DesktopIntent::LoadFailed {
+            generation: stale_generation,
+            message: "stale load failed".to_string(),
+        });
+
+        assert_eq!(model.state(), &DesktopAppState::Loaded);
+        assert!(model.loaded_data().is_some());
+    }
+
+    #[test]
     fn retained_loader_rejects_empty_path_list() {
         let result = load_retained_dataset(Vec::new());
         assert!(result.is_err());
