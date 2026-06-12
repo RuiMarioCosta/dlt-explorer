@@ -133,6 +133,29 @@ mod tests {
     }
 
     #[test]
+    fn desktop_model_success_then_reset_returns_idle() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "tests/data/testfile_control_messages.dlt",
+        );
+
+        let mut model = DesktopModel::default();
+        model.apply_intent(DesktopIntent::OpenFilesRequested);
+        let generation = model
+            .active_load_generation()
+            .expect("load generation should exist");
+
+        let data = load_retained_dataset(vec![path]).expect("fixture should load");
+        model.apply_intent(DesktopIntent::LoadSucceeded { generation, data });
+
+        assert_eq!(model.state(), &DesktopAppState::Loaded);
+        assert!(model.loaded_data().is_some());
+
+        model.apply_intent(DesktopIntent::ResetRequested);
+        assert_eq!(model.state(), &DesktopAppState::Idle);
+        assert!(model.loaded_data().is_none());
+    }
+
+    #[test]
     fn desktop_model_ignores_stale_load_completion_events() {
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
             "tests/data/testfile_control_messages.dlt",
@@ -197,6 +220,41 @@ mod tests {
         model.apply_intent(DesktopIntent::LoadFailed {
             generation: stale_generation,
             message: "stale load failed".to_string(),
+        });
+
+        assert_eq!(model.state(), &DesktopAppState::Loaded);
+        assert!(model.loaded_data().is_some());
+    }
+
+    #[test]
+    fn desktop_model_ignores_stale_failed_completion_while_newer_generation_is_loading() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
+            "tests/data/testfile_control_messages.dlt",
+        );
+
+        let mut model = DesktopModel::default();
+        model.apply_intent(DesktopIntent::OpenFilesRequested);
+        let stale_generation = model
+            .active_load_generation()
+            .expect("first load generation should exist");
+
+        model.apply_intent(DesktopIntent::OpenFilesRequested);
+        let active_generation = model
+            .active_load_generation()
+            .expect("second load generation should exist");
+
+        model.apply_intent(DesktopIntent::LoadFailed {
+            generation: stale_generation,
+            message: "stale load failed".to_string(),
+        });
+
+        assert_eq!(model.state(), &DesktopAppState::Loading);
+        assert_eq!(model.active_load_generation(), Some(active_generation));
+
+        let active_data = load_retained_dataset(vec![path]).expect("fixture should load");
+        model.apply_intent(DesktopIntent::LoadSucceeded {
+            generation: active_generation,
+            data: active_data,
         });
 
         assert_eq!(model.state(), &DesktopAppState::Loaded);
