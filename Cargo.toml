@@ -26,3 +26,14 @@ toml = "0.8"
 [[bench]]
 name = "dlt"
 harness = false
+
+[[bench]]
+name = "read_warm"
+harness = false
+
+[[bench]]
+name = "read_cold"
+harness = false
+
+[profile.bench]
+debug = 2

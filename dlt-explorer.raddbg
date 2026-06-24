@@ -1,0 +1,54 @@
+// raddbg 0.9.25 project file
+
+recent_file: path: "benches/custom.rs"
+recent_file: path: "benches/profiler/repetition_tester.rs"
+recent_file: path: "/rustc/1159e78c4747b02ef996e55082b704c09b970588/library/std/src/fs.rs"
+recent_file: path: "/rustc/1159e78c4747b02ef996e55082b704c09b970588/library/std/src/io/stdio.rs"
+recent_file: path: "benches/profiler/metrics.rs"
+recent_file: path: "D:/a/_work/1/s/src/vctools/crt/vcstartup/src/startup/exe_main.cpp"
+target:
+{
+  executable: "target/release/deps/custom-892c7784b748b369.exe"
+  working_directory: "target/release/deps"
+  enabled: 1
+}
+debug_info:
+{
+  path: "C:/Users/ctw00533/source/dlt/dlt-explorer/target/release/deps/custom-832ac0c640f03634.pdb"
+  timestamp: 66218178416121
+}
+debug_info:
+{
+  path: "C:/Users/ctw00533/source/dlt/dlt-explorer/target/release/deps/custom-bd5f7d0b10971583.pdb"
+  timestamp: 66218179050311
+}
+debug_info:
+{
+  path: "C:/Users/ctw00533/source/dlt/dlt-explorer/target/release/deps/custom-892c7784b748b369.pdb"
+  timestamp: 66218334640183
+}
+breakpoint:
+{
+  address_location: 0x7ff76eb41720
+  hit_count: 0
+}
+breakpoint:
+{
+  source_location: "benches/custom.rs:15:1"
+  hit_count: 2
+}
+breakpoint:
+{
+  source_location: "benches/profiler/repetition_tester.rs:69:1"
+  hit_count: 2
+}
+breakpoint:
+{
+  address_location: 0x7ff7181e1890
+  hit_count: 0
+}
+breakpoint:
+{
+  source_location: "benches/custom.rs:17:1"
+  hit_count: 2
+}
