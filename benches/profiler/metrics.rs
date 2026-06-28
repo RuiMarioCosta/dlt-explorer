@@ -3,10 +3,30 @@
 use std::arch::x86_64::_rdtsc;
 use std::time::Instant;
 
+#[repr(C)]
+struct ProcessMemoryCounters {
+    cb: u32,
+    page_fault_count: u32,
+    peak_working_set_size: usize,
+    working_set_size: usize,
+    quota_peak_paged_pool_usage: usize,
+    quota_paged_pool_usage: usize,
+    quota_peak_non_paged_pool_usage: usize,
+    quota_non_paged_pool_usage: usize,
+    pagefile_usage: usize,
+    peak_pagefile_usage: usize,
+}
+
 #[link(name = "kernel32")]
 unsafe extern "system" {
     fn QueryPerformanceFrequency(freq: *mut i64) -> i32;
     fn QueryPerformanceCounter(count: *mut i64) -> i32;
+    fn GetCurrentProcess() -> isize;
+    fn K32GetProcessMemoryInfo(
+        process: isize,
+        counters: *mut ProcessMemoryCounters,
+        cb: u32,
+    ) -> i32;
 }
 
 /// Ticks per second of the OS performance counter.
@@ -63,4 +83,18 @@ pub fn get_cpu_frequency() -> u64 {
 
     let cycles_per_nano = (end_cycles - start_cycles) as f64 / elapsed_nanos as f64;
     (cycles_per_nano * 1_000_000_000.0) as u64
+}
+
+/// Number of page faults incurred by the current process so far.
+pub fn read_os_pagefault_count() -> u64 {
+    let mut counters: ProcessMemoryCounters = unsafe { std::mem::zeroed() };
+    counters.cb = std::mem::size_of::<ProcessMemoryCounters>() as u32;
+
+    let ok = unsafe { K32GetProcessMemoryInfo(GetCurrentProcess(), &mut counters, counters.cb) };
+
+    if ok != 0 {
+        counters.page_fault_count as u64
+    } else {
+        0
+    }
 }

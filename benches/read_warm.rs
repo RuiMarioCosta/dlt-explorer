@@ -134,6 +134,9 @@ fn main() {
     let file_size = std::fs::metadata(&path).expect("read metadata").len();
     println!("File size: {} bytes", file_size);
 
+    let mut testers: [RepetitionTester; TEST_FUNCTIONS.len()] =
+        std::array::from_fn(|_| RepetitionTester::new(file_size, cpu_freq, 1));
+
     // Allocate the destination buffer once and write every byte so all pages are
     // faulted in up front. The timed regions then never pay for page faults.
     let mut buf: Vec<u8> = vec![0u8; file_size as usize];
@@ -141,9 +144,11 @@ fn main() {
         *byte = 0;
     }
 
-    for function in TEST_FUNCTIONS {
-        println!("--- {} ---", function.0);
-        let mut tester = RepetitionTester::new(file_size, cpu_freq, 10);
-        function.1(&mut tester, &mut buf, &path);
+    loop {
+        for (tester, function) in std::iter::zip(&mut testers, &TEST_FUNCTIONS) {
+            tester.reset();
+            println!("--- {} ---", function.0);
+            function.1(tester, &mut buf, &path);
+        }
     }
 }

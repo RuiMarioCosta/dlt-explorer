@@ -1,16 +1,33 @@
 // raddbg 0.9.25 project file
 
-recent_file: path: "benches/custom.rs"
 recent_file: path: "benches/profiler/repetition_tester.rs"
-recent_file: path: "/rustc/1159e78c4747b02ef996e55082b704c09b970588/library/std/src/fs.rs"
-recent_file: path: "/rustc/1159e78c4747b02ef996e55082b704c09b970588/library/std/src/io/stdio.rs"
+recent_file: path: "benches/read_cold.rs"
 recent_file: path: "benches/profiler/metrics.rs"
+recent_file: path: "benches/common/mod.rs"
+recent_file: path: "/rustc/1159e78c4747b02ef996e55082b704c09b970588/library/std/src/io/stdio.rs"
 recent_file: path: "D:/a/_work/1/s/src/vctools/crt/vcstartup/src/startup/exe_main.cpp"
+recent_file: path: "benches/custom.rs"
+recent_file: path: "/rustc/1159e78c4747b02ef996e55082b704c09b970588/library/std/src/fs.rs"
 target:
 {
-  executable: "target/release/deps/custom-892c7784b748b369.exe"
+  executable: "target/release/deps/read_cold-eeaa1eb9425147a2.exe"
+  working_directory: "target/release/deps"
+  enabled: 0
+  arguments: "C:\\Users\\ctw00533\\source\\dlt\\dlt-explorer\\tests\\data\\testfile_100k_rows.dlt"
+}
+target:
+{
+  executable: "target/release/deps/read_cold-6f63130dc318222b.exe"
   working_directory: "target/release/deps"
   enabled: 1
+  arguments: "C:\\Users\\ctw00533\\source\\dlt\\dlt-explorer\\tests\\data\\testfile_100k_rows.dlt"
+}
+target:
+{
+  executable: "target/release/deps/read_warm-8f2c6a2c68d59adc.exe"
+  working_directory: "target/release/deps"
+  enabled: 0
+  arguments: "C:\\Users\\ctw00533\\source\\dlt\\dlt-explorer\\tests\\data\\testfile_100k_rows.dlt"
 }
 debug_info:
 {
@@ -35,12 +52,7 @@ breakpoint:
 breakpoint:
 {
   source_location: "benches/custom.rs:15:1"
-  hit_count: 2
-}
-breakpoint:
-{
-  source_location: "benches/profiler/repetition_tester.rs:69:1"
-  hit_count: 2
+  hit_count: 0
 }
 breakpoint:
 {
@@ -50,5 +62,30 @@ breakpoint:
 breakpoint:
 {
   source_location: "benches/custom.rs:17:1"
-  hit_count: 2
+  hit_count: 0
+}
+debug_info:
+{
+  path: "C:/Users/ctw00533/source/dlt/dlt-explorer/target/release/deps/read_cold-eeaa1eb9425147a2.pdb"
+  timestamp: 66218691390540
+}
+debug_info:
+{
+  path: "C:/Users/ctw00533/source/dlt/dlt-explorer/target/release/deps/read_warm-8f2c6a2c68d59adc.pdb"
+  timestamp: 66218686187543
+}
+breakpoint:
+{
+  source_location: "benches/read_cold.rs:148:1"
+  hit_count: 1
+}
+debug_info:
+{
+  path: "C:/Users/ctw00533/source/dlt/dlt-explorer/target/release/deps/read_cold-6f63130dc318222b.pdb"
+  timestamp: 66218705143312
+}
+breakpoint:
+{
+  source_location: "benches/profiler/repetition_tester.rs:145:1"
+  hit_count: 1
 }
