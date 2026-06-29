@@ -122,11 +122,11 @@ fn read_with_mmap(tester: &mut RepetitionTester, path: &str) {
 
 type TestFunction = (&'static str, fn(&mut RepetitionTester, &str));
 
-const TEST_FUNCTIONS: [TestFunction; 2] = [
+const TEST_FUNCTIONS: [TestFunction; 4] = [
     ("std::fs::read", read_with_fs_read),
     ("fread", read_with_fread),
-    // ("Win32 ReadFile", read_with_win32),
-    // ("Mmap::map", read_with_mmap),
+    ("Win32 ReadFile", read_with_win32),
+    ("Mmap::map", read_with_mmap),
 ];
 
 fn main() {
@@ -141,7 +141,7 @@ fn main() {
     println!("File size: {} bytes", file_size);
 
     let mut testers: [RepetitionTester; TEST_FUNCTIONS.len()] =
-        std::array::from_fn(|_| RepetitionTester::new(file_size, cpu_freq, 1));
+        std::array::from_fn(|_| RepetitionTester::new(file_size, cpu_freq, 10));
 
     loop {
         for (tester, function) in std::iter::zip(&mut testers, &TEST_FUNCTIONS) {

@@ -135,7 +135,7 @@ fn main() {
     println!("File size: {} bytes", file_size);
 
     let mut testers: [RepetitionTester; TEST_FUNCTIONS.len()] =
-        std::array::from_fn(|_| RepetitionTester::new(file_size, cpu_freq, 1));
+        std::array::from_fn(|_| RepetitionTester::new(file_size, cpu_freq, 10));
 
     // Allocate the destination buffer once and write every byte so all pages are
     // faulted in up front. The timed regions then never pay for page faults.

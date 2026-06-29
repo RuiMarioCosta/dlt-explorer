@@ -1,8 +1,10 @@
 // raddbg 0.9.25 project file
 
 recent_file: path: "benches/profiler/repetition_tester.rs"
+recent_file: path: "benches/read_warm.rs"
 recent_file: path: "benches/read_cold.rs"
 recent_file: path: "benches/profiler/metrics.rs"
+recent_file: path: "../../../.rustup/toolchains/stable-x86_64-pc-windows-msvc/lib/rustlib/src/rust/library/alloc/src/string.rs"
 recent_file: path: "benches/common/mod.rs"
 recent_file: path: "/rustc/1159e78c4747b02ef996e55082b704c09b970588/library/std/src/io/stdio.rs"
 recent_file: path: "D:/a/_work/1/s/src/vctools/crt/vcstartup/src/startup/exe_main.cpp"
@@ -12,22 +14,32 @@ target:
 {
   executable: "target/release/deps/read_cold-eeaa1eb9425147a2.exe"
   working_directory: "target/release/deps"
-  enabled: 0
   arguments: "C:\\Users\\ctw00533\\source\\dlt\\dlt-explorer\\tests\\data\\testfile_100k_rows.dlt"
+  label: debug
 }
 target:
 {
   executable: "target/release/deps/read_cold-6f63130dc318222b.exe"
   working_directory: "target/release/deps"
-  enabled: 1
+  enabled: 0
   arguments: "C:\\Users\\ctw00533\\source\\dlt\\dlt-explorer\\tests\\data\\testfile_100k_rows.dlt"
+  label: release
 }
 target:
 {
   executable: "target/release/deps/read_warm-8f2c6a2c68d59adc.exe"
   working_directory: "target/release/deps"
+  enabled: 1
+  arguments: "C:\\Users\\ctw00533\\source\\dlt\\dlt-explorer\\tests\\data\\testfile_100k_rows.dlt"
+  label: release
+}
+target:
+{
+  executable: "target/release/deps/read_warm-a60d2baac3c63c86.exe"
+  working_directory: "target/release/deps"
   enabled: 0
   arguments: "C:\\Users\\ctw00533\\source\\dlt\\dlt-explorer\\tests\\data\\testfile_100k_rows.dlt"
+  label: debug
 }
 debug_info:
 {
@@ -44,26 +56,6 @@ debug_info:
   path: "C:/Users/ctw00533/source/dlt/dlt-explorer/target/release/deps/custom-892c7784b748b369.pdb"
   timestamp: 66218334640183
 }
-breakpoint:
-{
-  address_location: 0x7ff76eb41720
-  hit_count: 0
-}
-breakpoint:
-{
-  source_location: "benches/custom.rs:15:1"
-  hit_count: 0
-}
-breakpoint:
-{
-  address_location: 0x7ff7181e1890
-  hit_count: 0
-}
-breakpoint:
-{
-  source_location: "benches/custom.rs:17:1"
-  hit_count: 0
-}
 debug_info:
 {
   path: "C:/Users/ctw00533/source/dlt/dlt-explorer/target/release/deps/read_cold-eeaa1eb9425147a2.pdb"
@@ -72,20 +64,25 @@ debug_info:
 debug_info:
 {
   path: "C:/Users/ctw00533/source/dlt/dlt-explorer/target/release/deps/read_warm-8f2c6a2c68d59adc.pdb"
-  timestamp: 66218686187543
-}
-breakpoint:
-{
-  source_location: "benches/read_cold.rs:148:1"
-  hit_count: 1
+  timestamp: 66218792509786
 }
 debug_info:
 {
   path: "C:/Users/ctw00533/source/dlt/dlt-explorer/target/release/deps/read_cold-6f63130dc318222b.pdb"
-  timestamp: 66218705143312
+  timestamp: 66218786930688
+}
+debug_info:
+{
+  path: "C:/Users/ctw00533/source/dlt/dlt-explorer/target/release/deps/read_warm-a60d2baac3c63c86.pdb"
+  timestamp: 66218792333398
 }
 breakpoint:
 {
-  source_location: "benches/profiler/repetition_tester.rs:145:1"
+  source_location: "benches/profiler/repetition_tester.rs:163:1"
+  hit_count: 1
+}
+breakpoint:
+{
+  source_location: "benches/profiler/repetition_tester.rs:133:1"
   hit_count: 1
 }

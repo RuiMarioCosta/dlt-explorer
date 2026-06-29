@@ -37,4 +37,4 @@ harness = false
 
 [profile.bench]
 debug = 2
-opt-level = 0
+# opt-level = 0
